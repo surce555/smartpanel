@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -19,13 +20,19 @@ import (
 func main() {
 	cfg := config.InitConfig()
 
+	if os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	if err := database.InitDB(); err != nil {
 		log.Fatalf("Database initialization failed: %v", err)
 	}
 
 	services.InitDDNSService()
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery())
+	_ = r.SetTrustedProxies(nil)
 	r.Use(middleware.CORSMiddleware())
 
 	// Static files for uploads (icons, wallpapers, fonts)
@@ -143,6 +150,14 @@ func main() {
 	addr := fmt.Sprintf("0.0.0.0:%s", cfg.Port)
 	log.Printf("SmartPanel server listening on http://%s", addr)
 	if err := r.Run(addr); err != nil {
+		log.Printf("================================================================================")
+		log.Printf("[ERROR] SmartPanel 启动失败: 端口 %s 无法绑定 (%v)", cfg.Port, err)
+		log.Printf("[排查指南]")
+		log.Printf(" 1. 如果使用了 network_mode: host，说明 NAS 宿主机该端口已有其他服务运行（或旧容器未停止）。")
+		log.Printf(" 2. 如果 docker-compose.yml 中同时开启了 network_mode: host 和 ports 映射，会导致 Docker 端口冲突。")
+		log.Printf(" 3. 您可以通过环境变量 PANEL_PORT=5050 (或其他可用端口) 更换服务端口。")
+		log.Printf("================================================================================")
+		time.Sleep(10 * time.Second)
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

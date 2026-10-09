@@ -3,9 +3,10 @@ services:
     image: ghcr.io/surce555/smartpanel:latest
     container_name: smartpanel
     restart: unless-stopped
-    # 推荐 NAS 环境使用 host 网络模式以获得原生 IPv6 访问与网卡直通:
+    # 网络模式二选一（注意：使用 host 模式时必须注释掉下方的 ports 段，否则会冲突）：
+    # 模式 A (推荐 NAS IPv6 原生直通):
     # network_mode: host
-    # 若使用 host 模式，请注释掉下方的 ports 映射段
+    # 模式 B (标准桥接端口映射模式，左侧为主机访问端口，可按需修改如 5050:5666):
     ports:
       - "5666:5666"
     volumes:
@@ -14,6 +15,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - TZ=Asia/Shanghai
+      # 服务监听端口（如果 5666 端口被 NAS 其他服务占用，可改为 5050 或其他端口）
       - PANEL_PORT=5666
       - JWT_SECRET=change-this-jwt-secret-for-production-security
       - ENCRYPTION_KEY=change-this-32-byte-encryption-key-now!
