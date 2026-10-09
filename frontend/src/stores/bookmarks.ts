@@ -50,6 +50,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   const selectedTagId = ref<string | null>(null)
   const searchQuery = ref<string>('')
   const loading = ref<boolean>(false)
+  const draggingBookmarkId = ref<string | null>(null)
 
   const settingsStore = useSettingsStore()
   const { isIPv6Available } = useIPv6Probe()
@@ -183,6 +184,53 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     await fetchAll()
   }
 
+  async function moveBookmark(sourceId: string, targetId?: string, targetGroupId?: string) {
+    if (sourceId === targetId) return
+
+    const sourceIndex = bookmarks.value.findIndex((b) => b.id === sourceId)
+    if (sourceIndex === -1) return
+
+    const sourceItem = { ...bookmarks.value[sourceIndex] }
+    const newGroupId = targetGroupId || (targetId ? bookmarks.value.find((b) => b.id === targetId)?.group_id : sourceItem.group_id) || sourceItem.group_id
+    sourceItem.group_id = newGroupId
+
+    const list = [...bookmarks.value]
+    list.splice(sourceIndex, 1)
+
+    if (targetId) {
+      const targetIndex = list.findIndex((b) => b.id === targetId)
+      if (targetIndex !== -1) {
+        list.splice(targetIndex, 0, sourceItem)
+      } else {
+        list.push(sourceItem)
+      }
+    } else {
+      list.push(sourceItem)
+    }
+
+    const counters: Record<string, number> = {}
+    const itemsToUpdate: { id: string; sort_order: number; group_id: string }[] = []
+
+    for (const b of list) {
+      const gid = b.group_id || 'ungrouped'
+      const order = counters[gid] || 0
+      b.sort_order = order
+      counters[gid] = order + 1
+      itemsToUpdate.push({ id: b.id, sort_order: order, group_id: b.group_id })
+    }
+
+    // Optimistic local update
+    bookmarks.value = list
+
+    const api = useApi()
+    try {
+      await api.put('/bookmarks/reorder', itemsToUpdate)
+    } catch (err) {
+      console.error('Failed to save bookmark reordering:', err)
+      await fetchAll()
+    }
+  }
+
   async function createGroup(name: string, icon?: string) {
     const api = useApi()
     const resp = await api.post('/groups', { name, icon })
@@ -237,6 +285,8 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     updateBookmark,
     deleteBookmark,
     reorderBookmarks,
+    moveBookmark,
+    draggingBookmarkId,
     createGroup,
     updateGroup,
     deleteGroup,

@@ -6,15 +6,53 @@ import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useIPv6Probe } from '@/composables/useIPv6Probe'
+import { Bookmark } from '@/stores/bookmarks'
 import SearchBar from '@/components/SearchBar.vue'
 import GroupSection from '@/components/GroupSection.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import CardSizeSwitcher from '@/components/CardSizeSwitcher.vue'
+import QuickBookmarkModal from '@/components/QuickBookmarkModal.vue'
+import QuickTagModal from '@/components/QuickTagModal.vue'
 
 const router = useRouter()
 const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const { isIPv6Available, probeIPv6 } = useIPv6Probe()
+
+// Modals state
+const showBookmarkModal = ref<boolean>(false)
+const showTagModal = ref<boolean>(false)
+const editingBookmark = ref<Bookmark | null>(null)
+const targetGroupId = ref<string>('')
+
+function handleAddBookmark(groupId?: string) {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/' } })
+    return
+  }
+  editingBookmark.value = null
+  targetGroupId.value = groupId || bookmarksStore.groups[0]?.id || ''
+  showBookmarkModal.value = true
+}
+
+function handleEditBookmark(bookmark: Bookmark) {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/' } })
+    return
+  }
+  editingBookmark.value = bookmark
+  targetGroupId.value = bookmark.group_id
+  showBookmarkModal.value = true
+}
+
+function handleAddTag() {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/' } })
+    return
+  }
+  showTagModal.value = true
+}
 
 // Digital Clock
 const currentTime = ref<string>('')
@@ -134,7 +172,22 @@ function toggleTag(tagId: string) {
 
       <!-- Right: Controls -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Card Size Switcher (小 / 中 / 大) -->
+        <CardSizeSwitcher />
+
         <ThemeSwitcher />
+
+        <!-- Quick Add Bookmark Button (in header) -->
+        <button
+          v-if="authStore.isAuthenticated"
+          type="button"
+          @click="handleAddBookmark()"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 hover:scale-105 transition-all"
+          title="在首页快速添加卡片/书签"
+        >
+          <Icon icon="tabler:plus" class="w-4 h-4" />
+          <span class="hidden sm:inline">添加卡片</span>
+        </button>
 
         <!-- Admin / Login Link -->
         <router-link
@@ -166,7 +219,7 @@ function toggleTag(tagId: string) {
 
       <!-- Tags Quick Filter Bar -->
       <div
-        v-if="bookmarksStore.tags.length > 0"
+        v-if="bookmarksStore.tags.length > 0 || authStore.isAuthenticated"
         class="w-full max-w-4xl flex items-center justify-center flex-wrap gap-2 mb-8 px-2"
       >
         <button
@@ -196,6 +249,18 @@ function toggleTag(tagId: string) {
         >
           {{ t.name }}
         </button>
+
+        <!-- Add Tag Button (Quick Action) -->
+        <button
+          v-if="authStore.isAuthenticated"
+          type="button"
+          @click="handleAddTag"
+          class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700 transition-all"
+          title="新增分类标签"
+        >
+          <Icon icon="tabler:plus" class="w-3.5 h-3.5" />
+          <span>新建标签</span>
+        </button>
       </div>
 
       <!-- Groups and Bookmarks Display -->
@@ -206,6 +271,8 @@ function toggleTag(tagId: string) {
             v-for="g in bookmarksStore.groupedBookmarks"
             :key="g.id"
             :group="g"
+            @add-bookmark="handleAddBookmark($event)"
+            @edit-bookmark="handleEditBookmark($event)"
           />
         </template>
 
@@ -216,6 +283,14 @@ function toggleTag(tagId: string) {
         >
           <Icon icon="tabler:bookmark-off" class="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p class="text-sm">没有找到匹配的书签</p>
+          <button
+            v-if="authStore.isAuthenticated"
+            type="button"
+            @click="handleAddBookmark()"
+            class="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold"
+          >
+            + 立即添加首个卡片
+          </button>
         </div>
       </div>
     </main>
@@ -227,5 +302,18 @@ function toggleTag(tagId: string) {
         IPv6: {{ settingsStore.networkInfo.current_ipv6 }}
       </p>
     </footer>
+
+    <!-- Quick Modals -->
+    <QuickBookmarkModal
+      :show="showBookmarkModal"
+      :bookmark="editingBookmark"
+      :default-group-id="targetGroupId"
+      @close="showBookmarkModal = false"
+    />
+
+    <QuickTagModal
+      :show="showTagModal"
+      @close="showTagModal = false"
+    />
   </div>
 </template>

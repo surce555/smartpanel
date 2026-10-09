@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Bookmark } from '@/stores/bookmarks'
+import { Bookmark, useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import BookmarkCard from './BookmarkCard.vue'
 
-defineProps<{
+const props = defineProps<{
   bookmarks: Bookmark[]
+  groupId?: string
 }>()
 
+const emit = defineEmits<{
+  (e: 'edit', bookmark: Bookmark): void
+}>()
+
+const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 
 const gridClass = computed(() => {
@@ -32,14 +38,27 @@ const gridClass = computed(() => {
 
   return `${mClass} ${tClass} ${dClass}`
 })
+
+async function handleGridDrop(e: DragEvent) {
+  const sourceId = bookmarksStore.draggingBookmarkId || e.dataTransfer?.getData('text/plain')
+  if (sourceId && props.groupId) {
+    await bookmarksStore.moveBookmark(sourceId, undefined, props.groupId)
+  }
+}
 </script>
 
 <template>
-  <div class="grid gap-3.5 sm:gap-4 transition-all duration-300" :class="gridClass">
+  <div
+    @dragover.prevent
+    @drop.prevent="handleGridDrop"
+    class="grid gap-3.5 sm:gap-4 transition-all duration-300 min-h-[40px] p-1 rounded-2xl"
+    :class="gridClass"
+  >
     <BookmarkCard
       v-for="b in bookmarks"
       :key="b.id"
       :bookmark="b"
+      @edit="emit('edit', $event)"
     />
   </div>
 </template>
