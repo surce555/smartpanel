@@ -68,7 +68,7 @@ func (h *SettingsHandler) GetThemeSettings(c *gin.Context) {
 		"wallpaper_type", "wallpaper_blur", "wallpaper_mask", "wallpaper_interval",
 		"wallpaper_url", "wallpaper_custom_css", "custom_css", "custom_js",
 		"login_wallpaper_type", "login_wallpaper_url", "login_wallpaper_blur", "login_wallpaper_mask",
-		"font_family", "font_size", "title_font_family", "text_opacity", "content_top_offset",
+		"font_family", "font_size", "title_font_family", "text_opacity", "content_top_offset", "show_group_titles",
 	}
 
 	res := make(map[string]string)

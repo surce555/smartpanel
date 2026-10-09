@@ -38,6 +38,7 @@ async function handleEmptyDrop(e: DragEvent) {
       class="flex items-center gap-2 mb-3 px-1 select-none"
     >
       <h2
+        v-if="settingsStore.showGroupTitles"
         class="text-base sm:text-lg font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] tracking-wide cursor-pointer flex items-center gap-2 transition-opacity"
         :style="{ opacity: settingsStore.textOpacity / 100 }"
         @click="isCollapsed = !isCollapsed"
@@ -47,9 +48,9 @@ async function handleEmptyDrop(e: DragEvent) {
       <button
         type="button"
         @click.stop="emit('add-bookmark', group.id)"
-        class="text-white/80 hover:text-white transition-all p-0.5 cursor-pointer hover:scale-110 active:scale-95"
+        class="text-white/80 hover:text-white transition-all p-1 cursor-pointer hover:scale-125 active:scale-95 rounded-md hover:bg-white/10"
         :style="{ opacity: settingsStore.textOpacity / 100 }"
-        title="在此分组添加新卡片"
+        :title="group.name ? ('添加卡片至 ' + group.name) : '在此分组添加卡片'"
       >
         <Icon icon="tabler:plus" class="w-4 h-4 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]" />
       </button>

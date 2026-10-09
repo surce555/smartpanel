@@ -179,6 +179,7 @@ func seedDefaultData() error {
 		"require_login":         "false",
 		"text_opacity":          "100",
 		"content_top_offset":    "6",
+		"show_group_titles":     "false",
 	}
 
 	for k, v := range defaultSettings {

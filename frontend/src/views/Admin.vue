@@ -600,6 +600,7 @@ function handleLogout() {
                 login_wallpaper_mask: String(settingsStore.loginWallpaperMask),
                 text_opacity: String(settingsStore.textOpacity),
                 content_top_offset: String(settingsStore.contentTopOffset),
+                show_group_titles: String(settingsStore.showGroupTitles),
                 font_family: settingsStore.fontFamily,
                 font_size: settingsStore.fontSize,
                 custom_css: settingsStore.customCss,

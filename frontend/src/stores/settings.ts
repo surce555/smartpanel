@@ -48,6 +48,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const contentTopOffset = ref<number>(
     parseInt(localStorage.getItem('smartpanel_content_top_offset') || '6', 10) || 6
   )
+  const showGroupTitles = ref<boolean>(
+    localStorage.getItem('smartpanel_show_group_titles') === 'true'
+  )
 
   const fontFamily = ref<string>('')
   const fontSize = ref<string>('16px')
@@ -122,6 +125,10 @@ export const useSettingsStore = defineStore('settings', () => {
         const val = parseInt(s.content_top_offset, 10)
         contentTopOffset.value = isNaN(val) ? 6 : val
         localStorage.setItem('smartpanel_content_top_offset', String(contentTopOffset.value))
+      }
+      if (s.show_group_titles !== undefined) {
+        showGroupTitles.value = s.show_group_titles === 'true'
+        localStorage.setItem('smartpanel_show_group_titles', String(showGroupTitles.value))
       }
 
       if (s.font_family) fontFamily.value = s.font_family
@@ -207,6 +214,7 @@ export const useSettingsStore = defineStore('settings', () => {
         wallpaper_mask: '0',
         login_wallpaper_blur: '0',
         login_wallpaper_mask: '0',
+        show_group_titles: 'false',
       })
     } else if (preset === 'glass') {
       await saveSettings({
@@ -252,6 +260,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loginWallpaperMask,
     textOpacity,
     contentTopOffset,
+    showGroupTitles,
     fontFamily,
     fontSize,
     searchEngine,

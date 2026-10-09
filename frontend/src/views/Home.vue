@@ -70,16 +70,23 @@ async function handleSelectThemePreset(preset: 'crystal' | 'glass' | 'solid' | '
 async function persistQuickAppearance() {
   localStorage.setItem('smartpanel_text_opacity', String(settingsStore.textOpacity))
   localStorage.setItem('smartpanel_content_top_offset', String(settingsStore.contentTopOffset))
+  localStorage.setItem('smartpanel_show_group_titles', String(settingsStore.showGroupTitles))
   if (authStore.isAuthenticated) {
     try {
       await settingsStore.saveSettings({
         text_opacity: String(settingsStore.textOpacity),
         content_top_offset: String(settingsStore.contentTopOffset),
+        show_group_titles: String(settingsStore.showGroupTitles),
       })
     } catch (e) {
       // ignore
     }
   }
+}
+
+async function toggleGroupTitles() {
+  settingsStore.showGroupTitles = !settingsStore.showGroupTitles
+  await persistQuickAppearance()
 }
 
 function handleOutsideClick(e: MouseEvent) {
@@ -355,6 +362,23 @@ function toggleTag(tagId: string) {
             @change="persistQuickAppearance"
             class="w-full accent-indigo-500 cursor-pointer"
           />
+        </div>
+
+        <!-- Group Titles Switch (Default hidden, keeps only + icon) -->
+        <div class="flex items-center justify-between text-[11px] font-semibold text-white/70 pt-1">
+          <span>显示分组文字</span>
+          <button
+            type="button"
+            @click="toggleGroupTitles"
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+            :class="settingsStore.showGroupTitles ? 'bg-indigo-600' : 'bg-white/20'"
+            title="开启/关闭分组标题文字 (关闭时仅显示加号+)"
+          >
+            <span
+              class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+              :class="settingsStore.showGroupTitles ? 'translate-x-4' : 'translate-x-0'"
+            />
+          </button>
         </div>
       </div>
 
