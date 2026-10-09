@@ -14,6 +14,14 @@ import (
 type GroupHandler struct{}
 
 func (h *GroupHandler) GetGroups(c *gin.Context) {
+	isAuth, _ := c.Get("is_authenticated")
+	isAuthenticated, _ := isAuth.(bool)
+
+	if database.GetSetting("require_login") == "true" && !isAuthenticated {
+		c.JSON(http.StatusOK, []models.Group{})
+		return
+	}
+
 	rows, err := database.DB.Query("SELECT id, name, icon, sort_order, created_at FROM groups ORDER BY sort_order ASC, created_at ASC")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取分组失败", "code": http.StatusInternalServerError})

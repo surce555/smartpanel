@@ -11,23 +11,44 @@ const domain = ref<string>(settingsStore.networkInfo.domain || '')
 const v6domain = ref<string>(settingsStore.networkInfo.v6domain || '')
 const ddnsEnabled = ref<boolean>(settingsStore.networkInfo.ddns_enabled || false)
 const ddnsInterval = ref<number>(settingsStore.networkInfo.ddns_interval_minutes || 5)
+const manualIPv6 = ref<string>('')
 
 const isChecking = ref<boolean>(false)
 const saveMsg = ref<string>('')
 
+// Detected client/host IPv6
+const browserHostIPv6 = computed(() => {
+  if (settingsStore.networkInfo.detected_host_ipv6) {
+    return settingsStore.networkInfo.detected_host_ipv6
+  }
+  let h = window.location.hostname || ''
+  h = h.replace(/^\[|\]$/g, '')
+  if (h.includes(':')) {
+    return h
+  }
+  return ''
+})
+
 const ddnsStatusBadge = computed(() => {
   const s = settingsStore.networkInfo.ddns_status || 'idle'
   if (s.startsWith('success')) {
-    return { text: '同步正常', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' }
+    return { text: '同步正常', color: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400' }
   }
   if (s.startsWith('detect_failed') || s.startsWith('cf_error')) {
-    return { text: '同步失败: ' + s, color: 'bg-rose-50 text-rose-600 border-rose-200' }
+    return { text: '同步失败: ' + s, color: 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400' }
   }
   if (s === 'ddns_disabled') {
-    return { text: 'DDNS 未开启', color: 'bg-slate-100 text-slate-500 border-slate-200' }
+    return { text: 'DDNS 未开启', color: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800' }
   }
-  return { text: s, color: 'bg-amber-50 text-amber-600 border-amber-200' }
+  return { text: s, color: 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400' }
 })
+
+function applyDetectedIPv6() {
+  if (browserHostIPv6.value) {
+    manualIPv6.value = browserHostIPv6.value
+    handleManualCheck()
+  }
+}
 
 async function handleSave() {
   saveMsg.value = ''
@@ -43,6 +64,9 @@ async function handleSave() {
     if (cfApiToken.value) {
       payload.cf_api_token = cfApiToken.value
     }
+    if (manualIPv6.value.trim()) {
+      payload.current_ipv6 = manualIPv6.value.trim()
+    }
     await settingsStore.saveSettings(payload)
     saveMsg.value = '网络与 DDNS 设置保存成功！'
     cfApiToken.value = ''
@@ -53,8 +77,10 @@ async function handleSave() {
 
 async function handleManualCheck() {
   isChecking.value = true
+  saveMsg.value = ''
   try {
-    await settingsStore.triggerNetworkCheck()
+    await settingsStore.triggerNetworkCheck(manualIPv6.value.trim())
+    saveMsg.value = '已发送检测指令'
   } finally {
     setTimeout(() => {
       isChecking.value = false
@@ -76,7 +102,7 @@ async function handleManualCheck() {
           type="button"
           @click="handleManualCheck"
           :disabled="isChecking"
-          class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+          class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
         >
           {{ isChecking ? '检测中...' : '立即手动触发检测' }}
         </button>
@@ -105,6 +131,51 @@ async function handleManualCheck() {
           </span>
         </div>
       </div>
+
+      <!-- Quick Auto-detect & Fill Prompt from Browser / Host connection -->
+      <div
+        v-if="browserHostIPv6"
+        class="mt-2 pt-2 border-t border-indigo-200/50 dark:border-indigo-900/50 flex flex-wrap items-center justify-between gap-2 text-xs"
+      >
+        <div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+          <span>💡 识别到您当前正在通过 IPv6 访问本面板：</span>
+          <code class="font-mono text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-100/60 dark:bg-indigo-900/60 px-1.5 py-0.5 rounded">
+            {{ browserHostIPv6 }}
+          </code>
+        </div>
+        <button
+          type="button"
+          @click="applyDetectedIPv6"
+          class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-medium shadow-xs transition-colors"
+        >
+          一键设为此 IPv6 并同步
+        </button>
+      </div>
+    </div>
+
+    <!-- Manual IPv6 Override (Optional) -->
+    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60">
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+        手动指定公网 IPv6 地址 (选填，留空则使用 6.ipw.cn 等国内极速探针自动探测)
+      </label>
+      <div class="flex gap-2">
+        <input
+          type="text"
+          v-model="manualIPv6"
+          :placeholder="settingsStore.networkInfo.current_ipv6 || '例如: 2408:8214:224a:...'"
+          class="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <button
+          type="button"
+          @click="handleManualCheck"
+          class="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 text-xs font-medium rounded-xl transition-colors"
+        >
+          应用此地址
+        </button>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-1">
+        提示：若 Docker 容器运行在 Bridge 默认桥接模式下导致外部 IPv6 请求受阻，推荐在 docker-compose.yml 配置 <code>network_mode: host</code>，或直接在此手动填入。
+      </p>
     </div>
 
     <!-- Domain Settings -->

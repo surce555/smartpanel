@@ -25,7 +25,11 @@ type DDNSService struct {
 	stopChan     chan struct{}
 }
 
-var DDNS *DDNSService
+var (
+	DDNS                   *DDNSService
+	lastCapturedServerIPv6 string
+	serverIPMu             sync.RWMutex
+)
 
 func InitDDNSService() *DDNSService {
 	DDNS = &DDNSService{
@@ -40,6 +44,29 @@ func InitDDNSService() *DDNSService {
 	DDNS.TriggerCheck()
 
 	return DDNS
+}
+
+func RecordServerIPv6FromHost(host string) {
+	if host == "" {
+		return
+	}
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	h = strings.Trim(h, "[]")
+	ip := net.ParseIP(h)
+	if ip != nil && ip.To4() == nil && isGlobalUnicastIPv6(ip) {
+		serverIPMu.Lock()
+		lastCapturedServerIPv6 = ip.String()
+		serverIPMu.Unlock()
+	}
+}
+
+func GetCapturedServerIPv6() string {
+	serverIPMu.RLock()
+	defer serverIPMu.RUnlock()
+	return lastCapturedServerIPv6
 }
 
 func (s *DDNSService) TriggerCheck() {
@@ -88,25 +115,60 @@ func (s *DDNSService) worker() {
 	for {
 		select {
 		case <-ticker.C:
-			s.CheckAndUpdateIPv6()
+			s.CheckAndUpdateIPv6("")
 		case <-s.checkTrigger:
-			s.CheckAndUpdateIPv6()
+			s.CheckAndUpdateIPv6("")
 		case <-s.stopChan:
 			return
 		}
 	}
 }
 
+// GetLocalInterfaceIPv6 finds the first valid public global unicast IPv6 on network interfaces
+func GetLocalInterfaceIPv6() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip != nil && ip.To4() == nil && isGlobalUnicastIPv6(ip) {
+				return ip.String()
+			}
+		}
+	}
+	return ""
+}
+
 // FetchPublicIPv6 probes external endpoints to get public IPv6 address
 func FetchPublicIPv6() (string, error) {
+	// 1. Try domestic and global fast IPv6 test endpoints
 	endpoints := []string{
+		"https://6.ipw.cn",                   // 国内高可用极速 IPv6 探针
+		"https://speed.neu6.edu.cn/getIP.php", // 东北大学网络测速 IPv6 接口
+		"https://v6.ident.me",
+		"https://api64.ipify.org",
 		"https://api6.ipify.org",
 		"https://ipv6.icanhazip.com",
 		"https://ifconfig.co/ip",
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 4 * time.Second,
 	}
 
 	for _, url := range endpoints {
@@ -114,9 +176,8 @@ func FetchPublicIPv6() (string, error) {
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
-
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			continue
 		}
@@ -124,30 +185,53 @@ func FetchPublicIPv6() (string, error) {
 		ipStr := strings.TrimSpace(string(body))
 		ip := net.ParseIP(ipStr)
 		if ip != nil && ip.To4() == nil {
-			// Validate global unicast 2000::/3
 			if isGlobalUnicastIPv6(ip) {
 				return ipStr, nil
 			}
 		}
 	}
 
-	return "", fmt.Errorf("未能获取到有效的公网 IPv6 地址")
+	// 2. Check local network interfaces (e.g. host network mode)
+	if localIP := GetLocalInterfaceIPv6(); localIP != "" {
+		return localIP, nil
+	}
+
+	// 3. Check if server IPv6 was detected from incoming client Host header
+	if capturedIP := GetCapturedServerIPv6(); capturedIP != "" {
+		return capturedIP, nil
+	}
+
+	return "", fmt.Errorf("未能获取到有效的公网 IPv6 地址 (外部探针均不可达且本地未发现全局单播地址)")
 }
 
 func isGlobalUnicastIPv6(ip net.IP) bool {
 	if len(ip) != 16 {
 		return false
 	}
-	// 2000::/3 means first 3 bits are 001, so first byte is 0x20 to 0x3F
+	// 2000::/3 means first byte is 0x20 to 0x3F
 	firstByte := ip[0]
 	return firstByte >= 0x20 && firstByte <= 0x3F
 }
 
-func (s *DDNSService) CheckAndUpdateIPv6() {
+func (s *DDNSService) CheckAndUpdateIPv6(manualIPv6 string) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	_ = database.SetSetting("last_ipv6_check", now)
 
-	ipv6, err := FetchPublicIPv6()
+	var ipv6 string
+	var err error
+
+	if manualIPv6 != "" {
+		cleaned := strings.Trim(strings.TrimSpace(manualIPv6), "[]")
+		ip := net.ParseIP(cleaned)
+		if ip != nil && ip.To4() == nil && isGlobalUnicastIPv6(ip) {
+			ipv6 = ip.String()
+		} else {
+			err = fmt.Errorf("手动指定的 IPv6 地址格式不正确")
+		}
+	} else {
+		ipv6, err = FetchPublicIPv6()
+	}
+
 	if err != nil {
 		log.Printf("[DDNS] IPv6 检测失败: %v", err)
 		_ = database.SetSetting("ddns_status", "detect_failed: "+err.Error())
@@ -185,16 +269,17 @@ func (s *DDNSService) notifyCurrentNetwork() {
 	}
 
 	info := models.NetworkInfo{
-		CurrentIPv6:   database.GetSetting("current_ipv6"),
-		Domain:        database.GetSetting("domain"),
-		V6Domain:      database.GetSetting("v6domain"),
-		DDNSEnabled:   database.GetSetting("ddns_enabled") == "true",
-		DDNSInterval:  interval,
-		DDNSStatus:    database.GetSetting("ddns_status"),
-		LastIPv6Check: database.GetSetting("last_ipv6_check"),
-		CFZoneID:      database.GetSetting("cf_zone_id"),
-		CFRecordID:    database.GetSetting("cf_record_id"),
-		HasAPIToken:   database.GetSetting("cf_api_token_enc") != "",
+		CurrentIPv6:      database.GetSetting("current_ipv6"),
+		DetectedHostIPv6: GetCapturedServerIPv6(),
+		Domain:           database.GetSetting("domain"),
+		V6Domain:         database.GetSetting("v6domain"),
+		DDNSEnabled:      database.GetSetting("ddns_enabled") == "true",
+		DDNSInterval:     interval,
+		DDNSStatus:       database.GetSetting("ddns_status"),
+		LastIPv6Check:    database.GetSetting("last_ipv6_check"),
+		CFZoneID:         database.GetSetting("cf_zone_id"),
+		CFRecordID:       database.GetSetting("cf_record_id"),
+		HasAPIToken:      database.GetSetting("cf_api_token_enc") != "",
 	}
 	s.broadcast(info)
 }

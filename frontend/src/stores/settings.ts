@@ -5,6 +5,7 @@ import { useTheme } from '@/composables/useTheme'
 
 export interface NetworkInfo {
   current_ipv6: string
+  detected_host_ipv6?: string
   domain: string
   v6domain: string
   ddns_enabled: boolean
@@ -20,6 +21,7 @@ export interface NetworkInfo {
 export const useSettingsStore = defineStore('settings', () => {
   const theme = useTheme()
 
+  const requireLogin = ref<boolean>(false)
   const themeMode = ref<string>('system')
   const cardStyle = ref<string>('glass')
   const cardBorderRadius = ref<number>(12)
@@ -91,6 +93,7 @@ export const useSettingsStore = defineStore('settings', () => {
       if (s.footer_text) footerText.value = s.footer_text
       if (s.show_clock) showClock.value = s.show_clock === 'true'
       if (s.clock_format_24) clockFormat24.value = s.clock_format_24 === 'true'
+      if (s.require_login !== undefined) requireLogin.value = s.require_login === 'true'
 
       if (s.custom_css) {
         customCss.value = s.custom_css
@@ -150,12 +153,13 @@ export const useSettingsStore = defineStore('settings', () => {
     await fetchNetworkInfo()
   }
 
-  async function triggerNetworkCheck() {
+  async function triggerNetworkCheck(manualIPv6?: string) {
     const api = useApi()
-    await api.post('/system/network/check')
+    await api.post('/system/network/check', { manual_ipv6: manualIPv6 || '' })
   }
 
   return {
+    requireLogin,
     themeMode,
     cardStyle,
     cardBorderRadius,

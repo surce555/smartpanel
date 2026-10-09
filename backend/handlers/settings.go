@@ -27,6 +27,14 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 		settings["has_api_token"] = "true"
 	}
 
+	isAuth, _ := c.Get("is_authenticated")
+	isAuthenticated, _ := isAuth.(bool)
+	if !isAuthenticated {
+		delete(settings, "cf_zone_id")
+		delete(settings, "cf_record_id")
+		delete(settings, "cf_email")
+	}
+
 	c.JSON(http.StatusOK, settings)
 }
 

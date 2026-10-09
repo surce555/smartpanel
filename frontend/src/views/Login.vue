@@ -3,12 +3,14 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
-const email = ref<string>('admin@smartpanel.local')
+const email = ref<string>('admin')
 const password = ref<string>('admin123')
 const errorMsg = ref<string>('')
 
@@ -27,7 +29,7 @@ async function handleLogin() {
       showChangeModal.value = true
       oldPassword.value = password.value
     } else {
-      const redirect = (route.query.redirect as string) || '/admin'
+      const redirect = (route.query.redirect as string) || (settingsStore.requireLogin ? '/' : '/admin')
       router.push(redirect)
     }
   } else {
@@ -72,10 +74,11 @@ async function handleChangePassword() {
       <!-- Login Form -->
       <form @submit.prevent="handleLogin" class="space-y-4">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">登录邮箱</label>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">管理员账号 (用户名或邮箱)</label>
           <input
-            type="email"
+            type="text"
             v-model="email"
+            placeholder="请输入管理员账号 (如 admin)"
             required
             class="w-full px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
           />
@@ -86,6 +89,7 @@ async function handleChangePassword() {
           <input
             type="password"
             v-model="password"
+            placeholder="请输入管理员密码"
             required
             class="w-full px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
           />
@@ -106,8 +110,8 @@ async function handleChangePassword() {
 
       <!-- Default tips -->
       <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 text-center">
-        <p class="text-[11px] text-slate-400">默认初始化账号：admin@smartpanel.local / admin123</p>
-        <p class="text-[11px] text-slate-400 mt-0.5">首次登录将强制重置管理员密码</p>
+        <p class="text-[11px] text-slate-400">默认初始化账号：admin / admin123 (或 admin@smartpanel.local)</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">首次登录将强制重置管理员密码，登录后可在安全设置中自定义账号名</p>
       </div>
 
       <div class="mt-4 text-center">

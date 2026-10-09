@@ -3,6 +3,9 @@ services:
     image: ghcr.io/surce555/smartpanel:latest
     container_name: smartpanel
     restart: unless-stopped
+    # 推荐 NAS 环境使用 host 网络模式以获得原生 IPv6 访问与网卡直通:
+    # network_mode: host
+    # 若使用 host 模式，请注释掉下方的 ports 映射段
     ports:
       - "5666:5666"
     volumes:

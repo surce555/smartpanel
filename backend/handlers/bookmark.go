@@ -24,6 +24,11 @@ func (h *BookmarkHandler) GetBookmarks(c *gin.Context) {
 	isAuth, _ := c.Get("is_authenticated")
 	isAuthenticated, _ := isAuth.(bool)
 
+	if database.GetSetting("require_login") == "true" && !isAuthenticated {
+		c.JSON(http.StatusOK, []models.Bookmark{})
+		return
+	}
+
 	groupID := c.Query("group_id")
 	tagID := c.Query("tag_id")
 	search := c.Query("search")

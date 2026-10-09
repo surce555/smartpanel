@@ -64,6 +64,11 @@ const tagForm = ref({
   color: '#6366f1',
 })
 
+// Account & Security
+const accountName = ref('')
+const accountMsg = ref('')
+const securityMsg = ref('')
+
 // Password change
 const oldPwd = ref('')
 const newPwd = ref('')
@@ -76,6 +81,12 @@ const importing = ref(false)
 onMounted(async () => {
   await bookmarksStore.fetchAll()
   await settingsStore.fetchSettings()
+  if (!authStore.user) {
+    await authStore.fetchMe()
+  }
+  if (authStore.user?.email) {
+    accountName.value = authStore.user.email
+  }
 })
 
 // Bookmark actions
@@ -169,6 +180,35 @@ async function saveTag() {
 async function removeTag(id: string) {
   if (confirm('确认删除此标签？')) {
     await bookmarksStore.deleteTag(id)
+  }
+}
+
+// Account & Security actions
+async function handleUpdateAccount() {
+  accountMsg.value = ''
+  if (!accountName.value.trim()) {
+    accountMsg.value = '账号名称不能为空'
+    return
+  }
+  const res = await authStore.updateProfile(accountName.value.trim())
+  if (res.success) {
+    accountMsg.value = '管理员账号名称修改成功！下次请使用新账号登录。'
+  } else {
+    accountMsg.value = res.error || '修改失败'
+  }
+}
+
+async function handleToggleRequireLogin() {
+  securityMsg.value = ''
+  try {
+    await settingsStore.saveSettings({
+      require_login: settingsStore.requireLogin ? 'true' : 'false',
+    })
+    securityMsg.value = settingsStore.requireLogin
+      ? '已开启私密模式：未登录访客将直接跳转至登录页'
+      : '已关闭私密模式：公共书签对所有访客公开可见'
+  } catch (err: any) {
+    securityMsg.value = '保存失败: ' + (err.message || '未知错误')
   }
 }
 
@@ -551,38 +591,102 @@ function handleLogout() {
         </div>
 
         <!-- 7. Account Tab -->
-        <div v-else-if="activeTab === 'account'" class="space-y-6 max-w-md">
-          <div>
-            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">管理员密码修改</h3>
-            <p class="text-xs text-slate-500">修改登录凭证，请妥善保存</p>
+        <div v-else-if="activeTab === 'account'" class="space-y-6 max-w-lg">
+          <!-- 1. 访问控制与私密模式 -->
+          <div class="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div>
+              <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">访问权限与私密模式</h3>
+              <p class="text-xs text-slate-500">控制是否需要登录管理员账号才能查看面板书签内容</p>
+            </div>
+
+            <div class="flex items-center justify-between py-2">
+              <div>
+                <div class="text-xs font-semibold text-slate-700 dark:text-slate-300">强制登录后才显示导航页 (私密模式)</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">开启后，未登录访客访问首页将自动跳转至登录页，完全保护书签隐私</div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="settingsStore.requireLogin"
+                  @change="handleToggleRequireLogin"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white border border-transparent after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+
+            <div v-if="securityMsg" class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+              {{ securityMsg }}
+            </div>
           </div>
 
-          <div class="space-y-3">
+          <!-- 2. 管理员账号名称修改 -->
+          <div class="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-4">
             <div>
-              <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">当前原密码</label>
-              <input
-                type="password"
-                v-model="oldPwd"
-                class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700"
-              />
+              <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">管理员账号名称</h3>
+              <p class="text-xs text-slate-500">自定义登录时使用的管理员名称（可改为简短易记的用户名，如 admin、nas 或个人邮箱）</p>
             </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">管理员账号 / 用户名</label>
+                <input
+                  type="text"
+                  v-model="accountName"
+                  placeholder="例如：admin 或 mynas"
+                  class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div v-if="accountMsg" class="p-2.5 rounded-xl text-xs font-medium" :class="accountMsg.includes('成功') ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-500'">
+                {{ accountMsg }}
+              </div>
+
+              <button
+                @click="handleUpdateAccount"
+                class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors"
+              >
+                保存账号名称
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. 管理员密码修改 -->
+          <div class="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-4">
             <div>
-              <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">设定新密码</label>
-              <input
-                type="password"
-                v-model="newPwd"
-                class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700"
-              />
+              <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">管理员密码修改</h3>
+              <p class="text-xs text-slate-500">修改登录密码，保护面板管理权限</p>
             </div>
-            <div v-if="pwdMsg" class="text-xs font-medium text-indigo-600">
-              {{ pwdMsg }}
+
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">当前原密码</label>
+                <input
+                  type="password"
+                  v-model="oldPwd"
+                  placeholder="请输入原密码"
+                  class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">设定新密码</label>
+                <input
+                  type="password"
+                  v-model="newPwd"
+                  placeholder="至少 6 位密码"
+                  class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div v-if="pwdMsg" class="p-2.5 rounded-xl text-xs font-medium" :class="pwdMsg.includes('成功') ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-500'">
+                {{ pwdMsg }}
+              </div>
+              <button
+                @click="handleChangePassword"
+                class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors"
+              >
+                更新密码
+              </button>
             </div>
-            <button
-              @click="handleChangePassword"
-              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors"
-            >
-              更新密码
-            </button>
           </div>
         </div>
       </main>

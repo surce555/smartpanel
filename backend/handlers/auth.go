@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -21,15 +22,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	accountName := strings.TrimSpace(req.Email)
+
 	var user models.User
 	err := database.DB.QueryRow(
-		"SELECT id, email, password_hash, created_at FROM users WHERE email = ?",
-		req.Email,
+		"SELECT id, email, password_hash, created_at FROM users WHERE email = ? OR (email = 'admin@smartpanel.local' AND ? = 'admin')",
+		accountName, accountName,
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "邮箱或密码错误", "code": http.StatusUnauthorized})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "账号名称或密码错误", "code": http.StatusUnauthorized})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据库查询失败", "code": http.StatusInternalServerError})
@@ -37,7 +40,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "邮箱或密码错误", "code": http.StatusUnauthorized})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号名称或密码错误", "code": http.StatusUnauthorized})
 		return
 	}
 
@@ -87,6 +90,39 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		"id":                   user.ID,
 		"email":                user.Email,
 		"must_change_password": mustChange,
+	})
+}
+
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录", "code": http.StatusUnauthorized})
+		return
+	}
+
+	var req struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "账号名称不能为空", "code": http.StatusBadRequest})
+		return
+	}
+
+	newAccount := strings.TrimSpace(req.Email)
+	if newAccount == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "账号名称不能为空", "code": http.StatusBadRequest})
+		return
+	}
+
+	_, err := database.DB.Exec("UPDATE users SET email = ? WHERE id = ?", newAccount, userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "账号名称已被使用或更新失败", "code": http.StatusBadRequest})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "账号名称修改成功",
+		"email":   newAccount,
 	})
 }
 

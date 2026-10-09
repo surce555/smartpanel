@@ -58,12 +58,14 @@ func main() {
 			authGroup.POST("/logout", authH.Logout)
 			authGroup.GET("/me", middleware.AuthMiddleware(), authH.GetMe)
 			authGroup.PUT("/password", middleware.AuthMiddleware(), authH.ChangePassword)
+			authGroup.PUT("/profile", middleware.AuthMiddleware(), authH.UpdateProfile)
 		}
 
 		// Bookmarks & Groups (readable by guests, filtered by is_private)
-		api.GET("/groups", groupH.GetGroups)
+		api.GET("/groups", middleware.OptionalAuthMiddleware(), groupH.GetGroups)
 		api.GET("/bookmarks", middleware.OptionalAuthMiddleware(), bookmarkH.GetBookmarks)
 		api.GET("/tags", tagH.GetTags)
+		api.GET("/settings", middleware.OptionalAuthMiddleware(), settingsH.GetSettings)
 		api.GET("/settings/theme", settingsH.GetThemeSettings)
 		api.GET("/system/network", networkH.GetNetworkInfo)
 		api.GET("/system/network/stream", networkH.StreamNetworkUpdates)
@@ -93,7 +95,6 @@ func main() {
 			admin.DELETE("/tags/:id", tagH.DeleteTag)
 
 			// Settings
-			admin.GET("/settings", settingsH.GetSettings)
 			admin.PUT("/settings", settingsH.UpdateSettings)
 			admin.PUT("/settings/theme", settingsH.UpdateThemeSettings)
 

@@ -171,6 +171,7 @@ func seedDefaultData() error {
 		"cf_zone_id":            "",
 		"cf_record_id":          "",
 		"ddns_status":           "idle",
+		"require_login":         "false",
 	}
 
 	for k, v := range defaultSettings {

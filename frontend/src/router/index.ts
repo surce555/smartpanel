@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import Home from '@/views/Home.vue'
 import Login from '@/views/Login.vue'
 import Admin from '@/views/Admin.vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -31,13 +32,20 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const token = localStorage.getItem('smartpanel_token')
   if (to.meta.requiresAuth && !token) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else {
-    next()
+    return next({ name: 'Login', query: { redirect: to.fullPath } })
   }
+
+  if (to.name === 'Home' && !token) {
+    const settingsStore = useSettingsStore()
+    if (settingsStore.requireLogin) {
+      return next({ name: 'Login', query: { redirect: to.fullPath } })
+    }
+  }
+
+  next()
 })
 
 export default router

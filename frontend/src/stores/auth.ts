@@ -65,6 +65,22 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(email: string): Promise<{ success: boolean; error?: string }> {
+    const api = useApi()
+    try {
+      const resp = await api.put('/auth/profile', { email })
+      if (user.value) {
+        user.value.email = resp.data.email
+      }
+      return { success: true }
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.response?.data?.error || '修改账号名称失败',
+      }
+    }
+  }
+
   function logout() {
     token.value = null
     user.value = null
@@ -79,6 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
     mustChangePassword,
     login,
     fetchMe,
+    updateProfile,
     changePassword,
     logout,
   }

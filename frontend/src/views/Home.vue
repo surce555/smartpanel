@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -45,7 +45,21 @@ function updateClock() {
   currentWeekday.value = weekdays[now.getDay()]
 }
 
+watch(
+  () => [settingsStore.requireLogin, authStore.isAuthenticated],
+  ([reqLogin, isAuth]) => {
+    if (reqLogin && !isAuth) {
+      router.replace({ name: 'Login', query: { redirect: '/' } })
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(async () => {
+  if (settingsStore.requireLogin && !authStore.isAuthenticated) {
+    router.replace({ name: 'Login', query: { redirect: '/' } })
+    return
+  }
   updateClock()
   clockTimer = window.setInterval(updateClock, 1000)
   await bookmarksStore.fetchAll()
