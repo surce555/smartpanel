@@ -129,13 +129,98 @@ onMounted(() => {
           </div>
         </div>
       </div>
+
+      <!-- Presets Gallery -->
+      <div class="pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">精选预设高清壁纸库 (点击即换)</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div
+            v-for="p in [
+              { name: '咖啡厅微笑少女 (全透明)', url: '/wallpapers/home_cafe_girl.png' },
+              { name: '动漫山景少女', url: '/wallpapers/login_anime_girl.png' },
+              { name: '深邃星空银河', url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80' },
+              { name: '雪山晨曦湖畔', url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80' }
+            ]"
+            :key="p.name"
+            class="relative group rounded-xl overflow-hidden border aspect-video cursor-pointer transition-all shadow-xs"
+            :class="[settingsStore.wallpaperUrl === p.url ? 'ring-2 ring-indigo-500 shadow-md' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400']"
+            @click="selectWallpaper(p.url)"
+          >
+            <img :src="p.url" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-1.5">
+              <span class="text-[11px] font-medium text-white truncate">{{ p.name }}</span>
+            </div>
+            <div
+              v-if="settingsStore.wallpaperUrl === p.url"
+              class="absolute top-1 right-1 w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px]"
+            >
+              ✓
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Wallpaper Settings -->
+    <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-200">登录界面壁纸独立设置</h4>
+          <p class="text-xs text-slate-500">单独为用户登录认证界面设定专属壁纸背景</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+        <button
+          type="button"
+          @click="settingsStore.loginWallpaperType = 'follow'"
+          class="p-2.5 rounded-xl border text-center transition-all cursor-pointer"
+          :class="[settingsStore.loginWallpaperType === 'follow' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-semibold' : 'border-slate-200 dark:border-slate-800']"
+        >
+          跟随主站首页壁纸
+        </button>
+
+        <button
+          type="button"
+          @click="settingsStore.loginWallpaperType = 'upload'"
+          class="p-2.5 rounded-xl border text-center transition-all cursor-pointer"
+          :class="[settingsStore.loginWallpaperType === 'upload' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-semibold' : 'border-slate-200 dark:border-slate-800']"
+        >
+          独立壁纸图片
+        </button>
+      </div>
+
+      <div v-if="settingsStore.loginWallpaperType !== 'follow'" class="space-y-3">
+        <input
+          v-model="settingsStore.loginWallpaperUrl"
+          placeholder="输入登录页壁纸 URL 或从预置库选择"
+          class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700"
+        />
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            @click="settingsStore.loginWallpaperUrl = '/wallpapers/login_anime_girl.png'"
+            class="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs hover:underline cursor-pointer"
+          >
+            使用动漫山景少女 (预置默认)
+          </button>
+          <button
+            type="button"
+            @click="settingsStore.loginWallpaperUrl = '/wallpapers/home_cafe_girl.png'"
+            class="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs hover:underline cursor-pointer"
+          >
+            使用咖啡厅少女 (全透明预置)
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Sliders: Blur & Mask -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
       <div>
         <div class="flex justify-between text-sm mb-1.5">
-          <span class="text-slate-700 dark:text-slate-300 font-medium">壁纸模糊度</span>
+          <span class="text-slate-700 dark:text-slate-300 font-medium">首页壁纸模糊度</span>
           <span class="text-slate-500 font-mono text-xs">{{ settingsStore.wallpaperBlur }}px</span>
         </div>
         <input
@@ -150,7 +235,7 @@ onMounted(() => {
 
       <div>
         <div class="flex justify-between text-sm mb-1.5">
-          <span class="text-slate-700 dark:text-slate-300 font-medium">遮罩暗度</span>
+          <span class="text-slate-700 dark:text-slate-300 font-medium">首页遮罩暗度</span>
           <span class="text-slate-500 font-mono text-xs">{{ settingsStore.wallpaperMask }}%</span>
         </div>
         <input

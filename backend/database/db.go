@@ -155,6 +155,11 @@ func seedDefaultData() error {
 		"wallpaper_blur":        "0",
 		"wallpaper_mask":        "20",
 		"wallpaper_interval":    "60",     // seconds
+		"wallpaper_url":         "",
+		"login_wallpaper_type":  "follow", // follow, upload, preset, unsplash
+		"login_wallpaper_url":   "/wallpapers/login_anime_girl.png",
+		"login_wallpaper_blur":  "0",
+		"login_wallpaper_mask":  "15",
 		"search_default_engine": "bing",   // bing, google, baidu, custom
 		"search_custom_url":     "https://www.google.com/search?q=%s",
 		"footer_text":           "SmartPanel - NAS Navigation Dashboard",

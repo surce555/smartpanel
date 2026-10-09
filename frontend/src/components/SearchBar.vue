@@ -103,14 +103,24 @@ onUnmounted(() => {
 <template>
   <div class="relative w-full max-w-2xl mx-auto z-30">
     <div
-      class="flex items-center bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-200/20 dark:shadow-black/20 transition-all duration-300 focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:border-indigo-500"
+      class="flex items-center backdrop-blur-xl rounded-2xl transition-all duration-300 focus-within:ring-2 focus-within:ring-indigo-500/50"
+      :class="[
+        settingsStore.cardStyle === 'transparent'
+          ? 'bg-black/35 backdrop-blur-md border border-white/20 text-white shadow-xl focus-within:border-white/50'
+          : 'bg-white/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800/80 shadow-lg shadow-slate-200/20 dark:shadow-black/20 focus-within:border-indigo-500'
+      ]"
     >
       <!-- Engine Selector Button -->
       <div class="relative">
         <button
           type="button"
           @click="showEngines = !showEngines"
-          class="flex items-center gap-1.5 px-3.5 py-3 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border-r border-slate-200/60 dark:border-slate-800/60 transition-colors"
+          class="flex items-center gap-1.5 px-3.5 py-3 text-xs font-medium border-r transition-colors"
+          :class="[
+            settingsStore.cardStyle === 'transparent'
+              ? 'text-white border-white/20 hover:text-white/80'
+              : 'text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border-slate-200/60 dark:border-slate-800/60'
+          ]"
         >
           <span>{{ currentEngine.name }}</span>
           <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,15 +150,20 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Search Input -->
+      <!-- Search Input (text-base on mobile to avoid iOS Safari zoom) -->
       <div class="relative flex-1 flex items-center">
         <input
           ref="inputRef"
           type="text"
           v-model="bookmarksStore.searchQuery"
           @keydown.enter="handleEnter"
-          placeholder="搜索书签或回车网页检索... (按 / 或 Ctrl+K 聚焦)"
-          class="w-full px-4 py-3 bg-transparent text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+          placeholder="搜索书签或回车网页检索... (按 / 聚焦)"
+          class="w-full px-4 py-3 bg-transparent text-base sm:text-sm focus:outline-none"
+          :class="[
+            settingsStore.cardStyle === 'transparent'
+              ? 'text-white placeholder-white/50'
+              : 'text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500'
+          ]"
         />
         <button
           v-if="bookmarksStore.searchQuery"

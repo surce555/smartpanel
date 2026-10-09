@@ -477,6 +477,89 @@ function handleLogout() {
 
         <!-- 3. Appearance Tab -->
         <div v-else-if="activeTab === 'appearance'" class="space-y-10">
+          <!-- Preset Themes Quick Switcher -->
+          <div class="p-5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>🎨 预置主题一键应用</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-600 text-white font-medium">推荐</span>
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">一键配置卡片风格、高质壁纸与登录页视觉体系</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+              <button
+                type="button"
+                @click="settingsStore.applyPresetTheme('crystal')"
+                class="p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1 cursor-pointer"
+                :class="[
+                  settingsStore.cardStyle === 'transparent'
+                    ? 'border-indigo-500 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-semibold shadow-md ring-2 ring-indigo-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:bg-white text-slate-700 dark:text-slate-300'
+                ]"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold">✨ 全透明模式</span>
+                  <span v-if="settingsStore.cardStyle === 'transparent'" class="text-xs text-indigo-600 font-bold">当前</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-normal leading-tight">超清无框卡片，原图透光质感</span>
+              </button>
+
+              <button
+                type="button"
+                @click="settingsStore.applyPresetTheme('glass')"
+                class="p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1 cursor-pointer"
+                :class="[
+                  settingsStore.cardStyle === 'glass'
+                    ? 'border-indigo-500 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-semibold shadow-md ring-2 ring-indigo-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:bg-white text-slate-700 dark:text-slate-300'
+                ]"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold">🧊 经典毛玻璃</span>
+                  <span v-if="settingsStore.cardStyle === 'glass'" class="text-xs text-indigo-600 font-bold">当前</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-normal leading-tight">半透明亚克力模糊毛玻璃</span>
+              </button>
+
+              <button
+                type="button"
+                @click="settingsStore.applyPresetTheme('solid')"
+                class="p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1 cursor-pointer"
+                :class="[
+                  settingsStore.cardStyle === 'solid'
+                    ? 'border-indigo-500 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-semibold shadow-md ring-2 ring-indigo-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:bg-white text-slate-700 dark:text-slate-300'
+                ]"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold">◻️ 纯色卡片</span>
+                  <span v-if="settingsStore.cardStyle === 'solid'" class="text-xs text-indigo-600 font-bold">当前</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-normal leading-tight">经典实体白/深色卡片</span>
+              </button>
+
+              <button
+                type="button"
+                @click="settingsStore.applyPresetTheme('minimal')"
+                class="p-3.5 rounded-xl border text-left transition-all flex flex-col gap-1 cursor-pointer"
+                :class="[
+                  settingsStore.cardStyle === 'minimal'
+                    ? 'border-indigo-500 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-semibold shadow-md ring-2 ring-indigo-500/30'
+                    : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:bg-white text-slate-700 dark:text-slate-300'
+                ]"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-bold">▫️ 极简线条</span>
+                  <span v-if="settingsStore.cardStyle === 'minimal'" class="text-xs text-indigo-600 font-bold">当前</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-normal leading-tight">无背景阴影简洁平铺</span>
+              </button>
+            </div>
+          </div>
+
           <div>
             <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">卡片风格与排版</h3>
             <CardStyleSettings />
@@ -511,6 +594,10 @@ function handleLogout() {
                 wallpaper_blur: String(settingsStore.wallpaperBlur),
                 wallpaper_mask: String(settingsStore.wallpaperMask),
                 wallpaper_url: settingsStore.wallpaperUrl,
+                login_wallpaper_type: settingsStore.loginWallpaperType,
+                login_wallpaper_url: settingsStore.loginWallpaperUrl,
+                login_wallpaper_blur: String(settingsStore.loginWallpaperBlur),
+                login_wallpaper_mask: String(settingsStore.loginWallpaperMask),
                 font_family: settingsStore.fontFamily,
                 font_size: settingsStore.fontSize,
                 custom_css: settingsStore.customCss,

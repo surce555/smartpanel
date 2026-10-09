@@ -67,6 +67,7 @@ func (h *SettingsHandler) GetThemeSettings(c *gin.Context) {
 		"icon_size", "grid_cols_desktop", "grid_cols_tablet", "grid_cols_mobile",
 		"wallpaper_type", "wallpaper_blur", "wallpaper_mask", "wallpaper_interval",
 		"wallpaper_url", "wallpaper_custom_css", "custom_css", "custom_js",
+		"login_wallpaper_type", "login_wallpaper_url", "login_wallpaper_blur", "login_wallpaper_mask",
 		"font_family", "font_size", "title_font_family",
 	}
 

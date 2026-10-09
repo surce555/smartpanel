@@ -178,7 +178,7 @@ function handleClick(e: MouseEvent) {
     @dragleave="handleDragLeave"
     @drop.prevent="handleDrop"
     @click="handleClick"
-    class="group relative flex flex-col transition-all duration-300 cursor-pointer overflow-hidden select-none"
+    class="group relative flex flex-col transition-all duration-300 cursor-pointer overflow-hidden select-none touch-manipulation"
     :class="[
       cardStyleClass,
       shadowClass,
@@ -214,8 +214,13 @@ function handleClick(e: MouseEvent) {
     <div class="flex items-start justify-between gap-3 mb-2">
       <!-- Icon Container -->
       <div
-        class="flex items-center justify-center rounded-xl bg-slate-100/80 dark:bg-slate-800/80 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform duration-300 overflow-hidden shadow-xs shrink-0"
-        :class="iconSizeClass"
+        class="flex items-center justify-center rounded-xl group-hover:scale-105 transition-transform duration-300 overflow-hidden shadow-xs shrink-0"
+        :class="[
+          iconSizeClass,
+          settingsStore.cardStyle === 'transparent'
+            ? 'bg-black/35 backdrop-blur-md text-white border border-white/20'
+            : 'bg-slate-100/80 dark:bg-slate-800/80 text-indigo-600 dark:text-indigo-400'
+        ]"
       >
         <img
           v-if="isExternalOrUploadedIcon"
@@ -247,7 +252,7 @@ function handleClick(e: MouseEvent) {
         <span
           v-if="bookmark.is_private"
           title="私有书签（仅登录可见）"
-          class="text-slate-400 dark:text-slate-500"
+          :class="settingsStore.cardStyle === 'transparent' ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
@@ -259,8 +264,13 @@ function handleClick(e: MouseEvent) {
 
     <!-- Title -->
     <h3
-      class="text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate"
-      :class="titleSizeClass"
+      class="transition-colors truncate tracking-wide"
+      :class="[
+        titleSizeClass,
+        settingsStore.cardStyle === 'transparent'
+          ? 'text-white font-semibold drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]'
+          : 'text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+      ]"
     >
       {{ bookmark.name }}
     </h3>
@@ -268,8 +278,13 @@ function handleClick(e: MouseEvent) {
     <!-- Description (if any) -->
     <p
       v-if="bookmark.description"
-      class="text-slate-500 dark:text-slate-400"
-      :class="descLinesClass"
+      class="transition-colors"
+      :class="[
+        descLinesClass,
+        settingsStore.cardStyle === 'transparent'
+          ? 'text-white/85 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]'
+          : 'text-slate-500 dark:text-slate-400'
+      ]"
     >
       {{ bookmark.description }}
     </p>

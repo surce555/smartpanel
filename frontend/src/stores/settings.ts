@@ -37,6 +37,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const wallpaperInterval = ref<number>(60)
   const wallpaperUrl = ref<string>('')
 
+  const loginWallpaperType = ref<string>('follow')
+  const loginWallpaperUrl = ref<string>('/wallpapers/login_anime_girl.png')
+  const loginWallpaperBlur = ref<number>(0)
+  const loginWallpaperMask = ref<number>(15)
+
   const fontFamily = ref<string>('')
   const fontSize = ref<string>('16px')
 
@@ -83,6 +88,11 @@ export const useSettingsStore = defineStore('settings', () => {
       if (s.wallpaper_mask) wallpaperMask.value = parseInt(s.wallpaper_mask, 10) || 20
       if (s.wallpaper_interval) wallpaperInterval.value = parseInt(s.wallpaper_interval, 10) || 60
       if (s.wallpaper_url) wallpaperUrl.value = s.wallpaper_url
+
+      if (s.login_wallpaper_type) loginWallpaperType.value = s.login_wallpaper_type
+      if (s.login_wallpaper_url) loginWallpaperUrl.value = s.login_wallpaper_url
+      if (s.login_wallpaper_blur) loginWallpaperBlur.value = parseInt(s.login_wallpaper_blur, 10) || 0
+      if (s.login_wallpaper_mask) loginWallpaperMask.value = parseInt(s.login_wallpaper_mask, 10) || 15
 
       if (s.font_family) fontFamily.value = s.font_family
       if (s.font_size) fontSize.value = s.font_size
@@ -158,6 +168,46 @@ export const useSettingsStore = defineStore('settings', () => {
     await api.post('/system/network/check', { manual_ipv6: manualIPv6 || '' })
   }
 
+  async function applyPresetTheme(preset: 'crystal' | 'glass' | 'solid' | 'minimal') {
+    if (preset === 'crystal') {
+      await saveSettings({
+        card_style: 'transparent',
+        card_shadow: 'none',
+        wallpaper_type: 'upload',
+        wallpaper_url: '/wallpapers/home_cafe_girl.png',
+        wallpaper_blur: '0',
+        wallpaper_mask: '10',
+        login_wallpaper_type: 'upload',
+        login_wallpaper_url: '/wallpapers/login_anime_girl.png',
+        login_wallpaper_blur: '0',
+        login_wallpaper_mask: '15',
+      })
+    } else if (preset === 'glass') {
+      await saveSettings({
+        card_style: 'glass',
+        card_shadow: 'md',
+        wallpaper_type: 'gradient',
+        wallpaper_blur: '0',
+        wallpaper_mask: '20',
+        login_wallpaper_type: 'follow',
+      })
+    } else if (preset === 'solid') {
+      await saveSettings({
+        card_style: 'solid',
+        card_shadow: 'sm',
+        wallpaper_type: 'none',
+        login_wallpaper_type: 'follow',
+      })
+    } else if (preset === 'minimal') {
+      await saveSettings({
+        card_style: 'minimal',
+        card_shadow: 'none',
+        wallpaper_type: 'gradient',
+        login_wallpaper_type: 'follow',
+      })
+    }
+  }
+
   return {
     requireLogin,
     themeMode,
@@ -173,6 +223,10 @@ export const useSettingsStore = defineStore('settings', () => {
     wallpaperMask,
     wallpaperInterval,
     wallpaperUrl,
+    loginWallpaperType,
+    loginWallpaperUrl,
+    loginWallpaperBlur,
+    loginWallpaperMask,
     fontFamily,
     fontSize,
     searchEngine,
@@ -187,6 +241,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fetchNetworkInfo,
     setupSSE,
     saveSettings,
+    applyPresetTheme,
     triggerNetworkCheck,
   }
 })

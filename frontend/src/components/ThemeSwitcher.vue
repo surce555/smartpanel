@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Icon } from '@iconify/vue'
 import { useTheme, ThemeMode } from '@/composables/useTheme'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -61,6 +62,21 @@ function selectTheme(mode: ThemeMode) {
         <rect x="2" y="3" width="20" height="14" rx="2" stroke-width="2"/>
         <path stroke-linecap="round" stroke-width="2" d="M8 21h8m-4-4v4"/>
       </svg>
+    </button>
+
+    <!-- Crystal Transparent Mode Quick Toggle -->
+    <button
+      type="button"
+      @click="settingsStore.applyPresetTheme('crystal')"
+      class="p-1.5 rounded-full transition-all duration-200 flex items-center justify-center cursor-pointer ml-0.5"
+      :class="[
+        settingsStore.cardStyle === 'transparent'
+          ? 'bg-indigo-600 text-white shadow-sm'
+          : 'text-slate-600 dark:text-slate-400 hover:text-indigo-500'
+      ]"
+      title="一键应用全透明模式 (水晶透明)"
+    >
+      <Icon icon="tabler:sparkles" class="w-3.5 h-3.5" />
     </button>
   </div>
 </template>
