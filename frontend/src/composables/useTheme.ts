@@ -44,17 +44,17 @@ export function useTheme() {
   }
 
   function injectCustomJS(jsCode: string) {
-    if (!jsCode || !jsCode.trim()) return
-
-    // Remove existing script
     const existing = document.getElementById('smartpanel-custom-js')
     if (existing) {
       existing.remove()
     }
 
+    if (!jsCode || !jsCode.trim()) return
+
     try {
       const scriptEl = document.createElement('script')
       scriptEl.id = 'smartpanel-custom-js'
+      scriptEl.type = 'text/javascript'
       scriptEl.textContent = jsCode
       document.body.appendChild(scriptEl)
     } catch (err) {

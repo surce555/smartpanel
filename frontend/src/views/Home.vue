@@ -17,10 +17,13 @@ import NetworkRouteBadge from '@/components/NetworkRouteBadge.vue'
 import SpotlightSearch from '@/components/SpotlightSearch.vue'
 import QuickMemoModal from '@/components/QuickMemoModal.vue'
 
+import { useTheme } from '@/composables/useTheme'
+
 const router = useRouter()
 const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const theme = useTheme()
 const { probeIPv6 } = useIPv6Probe()
 
 // Modals state
@@ -178,6 +181,12 @@ onMounted(async () => {
   zenTimer = setInterval(updateZenClock, 1000)
   updateZenClock()
   resetIdleTimer()
+  if (settingsStore.customCss) {
+    theme.injectCustomCSS(settingsStore.customCss)
+  }
+  if (settingsStore.customJs) {
+    theme.injectCustomJS(settingsStore.customJs)
+  }
   await bookmarksStore.fetchAll()
 })
 
