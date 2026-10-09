@@ -202,10 +202,12 @@ function toggleTag(tagId: string) {
 </script>
 
 <template>
-  <div
-    class="relative min-h-[100dvh] flex flex-col justify-start p-3.5 sm:p-6 lg:p-8 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] max-w-7xl mx-auto transition-all duration-700"
-    :class="{ 'opacity-0 pointer-events-none scale-95': isZenMode }"
-  >
+  <div class="relative min-h-[100dvh] flex flex-col justify-start p-3.5 sm:p-6 lg:p-8 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] max-w-7xl mx-auto">
+    <!-- Main Dashboard Viewport (Fades out smoothly in Zen mode) -->
+    <div
+      class="transition-all duration-700 flex-1 flex flex-col w-full"
+      :class="{ 'opacity-0 pointer-events-none scale-95': isZenMode }"
+    >
     
     <!-- ========================================== -->
     <!-- 1. FLOATING LAUNCHER (Transparent Mode)    -->
@@ -458,6 +460,7 @@ function toggleTag(tagId: string) {
       </div>
 
       <!-- Quick Actions -->
+      <div class="pt-2 border-t border-white/10 space-y-1.5">
         <!-- Spotlight Search -->
         <button
           type="button"
@@ -627,6 +630,7 @@ function toggleTag(tagId: string) {
         </div>
       </div>
     </main>
+    </div>
 
     <!-- Quick Modals -->
     <QuickBookmarkModal
@@ -652,34 +656,34 @@ function toggleTag(tagId: string) {
       :show="showMemoModal"
       @close="showMemoModal = false"
     />
-  </div>
 
-  <!-- Zen Screensaver Ambient Clock Overlay -->
-  <transition
-    enter-active-class="transition duration-500 ease-out"
-    enter-from-class="opacity-0"
-    enter-to-class="opacity-100"
-    leave-active-class="transition duration-300 ease-in"
-    leave-from-class="opacity-100"
-    leave-to-class="opacity-0"
-  >
-    <div
-      v-if="isZenMode"
-      @click="isZenMode = false"
-      class="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none bg-black/25 backdrop-blur-[2px]"
+    <!-- Zen Screensaver Ambient Clock Overlay -->
+    <transition
+      enter-active-class="transition duration-500 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-300 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
-      <div class="text-center space-y-3 p-8 sm:p-12 rounded-3xl bg-black/30 backdrop-blur-md border border-white/10 shadow-2xl animate-pulse">
-        <div class="text-6xl sm:text-8xl md:text-9xl font-extralight tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)] font-mono">
-          {{ zenTime }}
-        </div>
-        <div class="text-base sm:text-xl font-light text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] tracking-widest">
-          {{ zenDate }}
-        </div>
-        <div class="pt-4 text-xs text-white/50 font-light flex items-center justify-center gap-1.5">
-          <Icon icon="tabler:sparkles" class="w-4 h-4 text-amber-400" />
-          <span>Zen 沉浸屏保模式 · 晃动鼠标或触控任意处退出</span>
+      <div
+        v-if="isZenMode"
+        @click="isZenMode = false"
+        class="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none bg-black/25 backdrop-blur-[2px]"
+      >
+        <div class="text-center space-y-3 p-8 sm:p-12 rounded-3xl bg-black/30 backdrop-blur-md border border-white/10 shadow-2xl animate-pulse">
+          <div class="text-6xl sm:text-8xl md:text-9xl font-extralight tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)] font-mono">
+            {{ zenTime }}
+          </div>
+          <div class="text-base sm:text-xl font-light text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] tracking-widest">
+            {{ zenDate }}
+          </div>
+          <div class="pt-4 text-xs text-white/50 font-light flex items-center justify-center gap-1.5">
+            <Icon icon="tabler:sparkles" class="w-4 h-4 text-amber-400" />
+            <span>Zen 沉浸屏保模式 · 晃动鼠标或触控任意处退出</span>
+          </div>
         </div>
       </div>
-    </div>
-  </transition>
+    </transition>
+  </div>
 </template>
