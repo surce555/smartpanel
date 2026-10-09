@@ -1,0 +1,10 @@
+name = "smartpanel-traffic-router"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# 你的 IPv6 直连域名与端口 (必须提前配置好 AAAA 记录与 HTTPS 证书，关闭小黄云仅 DNS)
+V6_TARGET = "v6.yourdomain.com:5666"
+
+# 是否在 302 重定向之前快速探活 NAS 端口 (默认开启)
+ENABLE_PROBE = "true"

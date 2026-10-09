@@ -1,0 +1,42 @@
+name: Release with Docker Compose Asset
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            docker-compose.yml
+          generate_release_notes: true
+          body: |
+            ### 🚀 SmartPanel ${{ github.ref_name }} 发布说明
+            
+            #### 📦 镜像拉取命令：
+            ```bash
+            docker pull ghcr.io/surce555/smartpanel:latest
+            ```
+            
+            #### 🛠️ 一键部署说明：
+            1. 下载下方附件中的 `docker-compose.yml`。
+            2. 在文件所在目录下执行：
+               ```bash
+               docker-compose up -d
+               ```
+            3. 访问 `http://<NAS_IP>:5666` 进入管理面板。
+            
+            #### 🔑 初始管理员账号：
+            - 邮箱：`admin@smartpanel.local`
+            - 初始密码：`admin123`
+            *(首次登录会强制要求重置密码)*

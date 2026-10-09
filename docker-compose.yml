@@ -1,0 +1,16 @@
+services:
+  smartpanel:
+    image: ghcr.io/surce555/smartpanel:latest
+    container_name: smartpanel
+    restart: unless-stopped
+    ports:
+      - "5666:5666"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - PANEL_PORT=5666
+      - JWT_SECRET=change-this-jwt-secret-for-production-security
+      - ENCRYPTION_KEY=change-this-32-byte-encryption-key-now!

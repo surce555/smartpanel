@@ -1,0 +1,37 @@
+# Binaries & build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+dist/
+build/
+test_bin*
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Data & database
+data/
+uploads/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.npmrc
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
