@@ -9,6 +9,7 @@ const cfZoneId = ref<string>(settingsStore.networkInfo.cf_zone_id || '')
 const cfRecordId = ref<string>(settingsStore.networkInfo.cf_record_id || '')
 const domain = ref<string>(settingsStore.networkInfo.domain || '')
 const v6domain = ref<string>(settingsStore.networkInfo.v6domain || '')
+const lanDomain = ref<string>(settingsStore.networkInfo.lan_domain || '')
 const ddnsEnabled = ref<boolean>(settingsStore.networkInfo.ddns_enabled || false)
 const ddnsInterval = ref<number>(settingsStore.networkInfo.ddns_interval_minutes || 5)
 const manualIPv6 = ref<string>('')
@@ -58,6 +59,7 @@ async function handleSave() {
       cf_record_id: cfRecordId.value,
       domain: domain.value,
       v6domain: v6domain.value,
+      lan_domain: lanDomain.value.trim(),
       ddns_enabled: ddnsEnabled.value ? 'true' : 'false',
       ddns_interval_minutes: String(ddnsInterval.value),
     }
@@ -108,11 +110,29 @@ async function handleManualCheck() {
         </button>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
         <div>
           <span class="text-slate-500 block mb-0.5">当前公网 IPv6:</span>
           <span class="font-mono font-semibold text-slate-800 dark:text-slate-200 break-all">
             {{ settingsStore.networkInfo.current_ipv6 || '暂无检测记录' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-slate-500 block mb-0.5">当前访客客户端 IP:</span>
+          <span class="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+            <span>{{ settingsStore.networkInfo.client_ip || '127.0.0.1' }}</span>
+            <span
+              v-if="settingsStore.networkInfo.is_client_lan"
+              class="px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400"
+            >
+              内网
+            </span>
+            <span
+              v-else
+              class="px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400"
+            >
+              外网
+            </span>
           </span>
         </div>
         <div>
@@ -179,7 +199,7 @@ async function handleManualCheck() {
     </div>
 
     <!-- Domain Settings -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div>
         <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">主域名 (Cloudflare Tunnel 回源入口)</label>
         <input
@@ -200,6 +220,17 @@ async function handleManualCheck() {
           class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <p class="text-[11px] text-slate-400 mt-1">对应模板变量 <code class="font-mono">{v6domain}</code></p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">局域网专属域名 / 后缀 (可选)</label>
+        <input
+          type="text"
+          v-model="lanDomain"
+          placeholder="例如: nas.lan 或 *.home"
+          class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <p class="text-[11px] text-slate-400 mt-1">此域名访问时自动识别内网并优先局域网直连</p>
       </div>
     </div>
 

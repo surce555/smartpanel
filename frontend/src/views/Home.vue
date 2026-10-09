@@ -470,6 +470,12 @@ function toggleTag(tagId: string) {
         </div>
       </div>
 
+      <!-- Network Routing Status & Switcher -->
+      <div class="pt-2 border-t border-white/10 flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-white/70">网络分流路由</span>
+        <NetworkRouteBadge />
+      </div>
+
       <!-- Quick Actions -->
       <div class="pt-2 border-t border-white/10 space-y-1.5">
         <!-- Spotlight Search -->

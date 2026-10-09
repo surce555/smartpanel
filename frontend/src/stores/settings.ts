@@ -8,6 +8,7 @@ export interface NetworkInfo {
   detected_host_ipv6?: string
   domain: string
   v6domain: string
+  lan_domain?: string
   ddns_enabled: boolean
   ddns_interval_minutes: number
   ddns_status: string
@@ -16,6 +17,10 @@ export interface NetworkInfo {
   cf_zone_id?: string
   cf_record_id?: string
   has_api_token: boolean
+  is_client_lan?: boolean
+  client_ip?: string
+  host_lan_ips?: string[]
+  server_port?: string
 }
 
 export const useSettingsStore = defineStore('settings', () => {

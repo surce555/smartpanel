@@ -79,18 +79,23 @@ type ReorderItem struct {
 }
 
 type NetworkInfo struct {
-	CurrentIPv6      string `json:"current_ipv6"`
-	DetectedHostIPv6 string `json:"detected_host_ipv6,omitempty"`
-	Domain           string `json:"domain"`
-	V6Domain         string `json:"v6domain"`
-	DDNSEnabled      bool   `json:"ddns_enabled"`
-	DDNSInterval     int    `json:"ddns_interval_minutes"`
-	DDNSStatus       string `json:"ddns_status"` // 'idle', 'updating', 'success', 'failed'
-	LastIPv6Check    string `json:"last_ipv6_check"`
-	HasCFTunnel      bool   `json:"has_cf_tunnel"`
-	CFZoneID         string `json:"cf_zone_id,omitempty"`
-	CFRecordID       string `json:"cf_record_id,omitempty"`
-	HasAPIToken      bool   `json:"has_api_token"`
+	CurrentIPv6      string   `json:"current_ipv6"`
+	DetectedHostIPv6 string   `json:"detected_host_ipv6,omitempty"`
+	Domain           string   `json:"domain"`
+	V6Domain         string   `json:"v6domain"`
+	LANDomain        string   `json:"lan_domain,omitempty"`
+	DDNSEnabled      bool     `json:"ddns_enabled"`
+	DDNSInterval     int      `json:"ddns_interval_minutes"`
+	DDNSStatus       string   `json:"ddns_status"` // 'idle', 'updating', 'success', 'failed'
+	LastIPv6Check    string   `json:"last_ipv6_check"`
+	HasCFTunnel      bool     `json:"has_cf_tunnel"`
+	CFZoneID         string   `json:"cf_zone_id,omitempty"`
+	CFRecordID       string   `json:"cf_record_id,omitempty"`
+	HasAPIToken      bool     `json:"has_api_token"`
+	IsClientLAN      bool     `json:"is_client_lan"`
+	ClientIP         string   `json:"client_ip,omitempty"`
+	HostLANIPs       []string `json:"host_lan_ips,omitempty"`
+	ServerPort       string   `json:"server_port,omitempty"`
 }
 
 type NetworkSettingsUpdateRequest struct {
@@ -99,6 +104,7 @@ type NetworkSettingsUpdateRequest struct {
 	CFRecordID          string `json:"cf_record_id"`
 	Domain              string `json:"domain"`
 	V6Domain            string `json:"v6domain"`
+	LANDomain           string `json:"lan_domain"`
 	DDNSEnabled         bool   `json:"ddns_enabled"`
 	DDNSIntervalMinutes int    `json:"ddns_interval_minutes"`
 }

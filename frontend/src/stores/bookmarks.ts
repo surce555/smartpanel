@@ -53,7 +53,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   const draggingBookmarkId = ref<string | null>(null)
 
   const settingsStore = useSettingsStore()
-  const { isIPv6Available, routePreference } = useIPv6Probe()
+  const { isIPv6Available, isLanAvailable, routePreference } = useIPv6Probe()
 
   function getInternalUrl(b: Bookmark): string {
     return b.url_internal ? b.url_internal.trim() : ''
@@ -113,9 +113,14 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
 
     // 2. Auto Routing (智能优选: 内网 ➔ IPv6 ➔ 域名)
     const hostname = window.location.hostname
+    const inLan =
+      isLanHost(hostname) ||
+      net.is_client_lan === true ||
+      isLanAvailable.value === true ||
+      (Boolean(net.lan_domain) && (hostname === net.lan_domain || hostname.endsWith(`.${net.lan_domain}`)))
 
-    // (a) Visiting via LAN IP / hostname: prioritize internal URL
-    if (isLanHost(hostname)) {
+    // (a) Client is in LAN (even when accessing via domain): ALWAYS prioritize internal LAN URL!
+    if (inLan) {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
 
@@ -124,7 +129,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
-    // (c) Visiting via Domain (e.g. pan.yourdomain.com):
+    // (c) Visiting via Domain outside LAN:
     // Prioritize IPv6 if available; fallback to domain proxy; finally fallback to internal
     if (isIPv6Available.value !== false && v6Url) {
       return v6Url

@@ -4,7 +4,7 @@ import { Icon } from '@iconify/vue'
 import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
-const { isIPv6Available, routePreference, setRoutePreference, probeIPv6 } = useIPv6Probe()
+const { isIPv6Available, isLanAvailable, routePreference, setRoutePreference, probeIPv6 } = useIPv6Probe()
 const settingsStore = useSettingsStore()
 
 const showMenu = ref(false)
@@ -15,7 +15,14 @@ const currentActiveMode = computed(() => {
   }
 
   // Auto evaluation:
-  if (isLanHost(window.location.hostname)) {
+  const net = settingsStore.networkInfo
+  const inLan =
+    isLanHost(window.location.hostname) ||
+    net.is_client_lan === true ||
+    isLanAvailable.value === true ||
+    (Boolean(net.lan_domain) && (window.location.hostname === net.lan_domain || window.location.hostname.endsWith(`.${net.lan_domain}`)))
+
+  if (inLan) {
     return 'lan'
   }
   if (isIPv6Host(window.location.hostname) || isIPv6Available.value === true) {

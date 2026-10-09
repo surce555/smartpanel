@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 const isIPv6Available = ref<boolean | null>(null)
+const isLanAvailable = ref<boolean | null>(null)
 const isProbing = ref<boolean>(false)
 const routePreference = ref<'auto' | 'lan' | 'ipv6' | 'domain'>(
   (localStorage.getItem('smartpanel_route_preference') as any) || 'auto'
@@ -107,17 +108,58 @@ export function useIPv6Probe() {
     }
   }
 
+  /**
+   * Probe LAN reachability by checking local host IPs with short timeout.
+   */
+  async function probeLanConnectivity(hostLanIps?: string[], port: string = '5050', timeoutMs: number = 500): Promise<boolean> {
+    if (isLanHost(window.location.hostname)) {
+      isLanAvailable.value = true
+      return true
+    }
+
+    if (!hostLanIps || hostLanIps.length === 0) {
+      return false
+    }
+
+    // If current page is HTTPS, browsers block mixed content fetch to HTTP, skip active probe
+    if (window.location.protocol === 'https:') {
+      return false
+    }
+
+    const testIp = hostLanIps[0]
+    const testUrl = `http://${testIp}:${port}/api/system/network`
+
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      await fetch(testUrl, { mode: 'no-cors', signal: controller.signal })
+      clearTimeout(timer)
+      isLanAvailable.value = true
+      return true
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        // Non-timeout error means TCP connection reached host
+        isLanAvailable.value = true
+        return true
+      }
+      return false
+    }
+  }
+
   function clearProbeCache() {
     sessionStorage.removeItem('smartpanel_ipv6_probe')
     isIPv6Available.value = null
+    isLanAvailable.value = null
   }
 
   return {
     isIPv6Available,
+    isLanAvailable,
     isProbing,
     routePreference,
     setRoutePreference,
     probeIPv6,
+    probeLanConnectivity,
     clearProbeCache,
   }
 }
