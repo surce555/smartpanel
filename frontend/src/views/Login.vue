@@ -33,10 +33,20 @@ function toggleTheme() {
 }
 
 const activeWallpaperUrl = computed(() => {
-  if (settingsStore.loginWallpaperType === 'follow') {
-    return settingsStore.wallpaperUrl || ''
+  if (settingsStore.loginWallpaperType === 'upload' && settingsStore.loginWallpaperUrl) {
+    return settingsStore.loginWallpaperUrl
   }
-  return settingsStore.loginWallpaperUrl || settingsStore.wallpaperUrl || ''
+  if (settingsStore.loginWallpaperUrl) {
+    return settingsStore.loginWallpaperUrl
+  }
+  if (settingsStore.wallpaperUrl) {
+    return settingsStore.wallpaperUrl
+  }
+  const cachedLogin = localStorage.getItem('smartpanel_login_wallpaper')
+  if (cachedLogin) return cachedLogin
+  const cachedHome = localStorage.getItem('smartpanel_wallpaper')
+  if (cachedHome) return cachedHome
+  return ''
 })
 
 const wallpaperStyle = computed(() => {
@@ -93,21 +103,27 @@ async function handleChangePassword() {
 
 onMounted(async () => {
   await settingsStore.fetchSettings()
+  if (settingsStore.loginWallpaperUrl) {
+    localStorage.setItem('smartpanel_login_wallpaper', settingsStore.loginWallpaperUrl)
+  }
+  if (settingsStore.wallpaperUrl) {
+    localStorage.setItem('smartpanel_wallpaper', settingsStore.wallpaperUrl)
+  }
 })
 </script>
 
 <template>
-  <div class="relative min-h-[100dvh] flex items-center justify-center p-4 overflow-hidden select-none bg-slate-950">
+  <div class="relative min-h-[100dvh] flex items-center justify-center p-4 overflow-hidden select-none">
     <!-- Dynamic Fullscreen Wallpaper Background Layer -->
     <div
-      v-if="activeWallpaperUrl"
-      class="fixed inset-0 -z-20 bg-cover bg-center transition-all duration-700 pointer-events-none"
+      class="fixed inset-0 z-0 bg-cover bg-center transition-all duration-700 pointer-events-none bg-slate-950"
       :style="wallpaperStyle"
     ></div>
 
-    <!-- Wallpaper Mask Layer -->
+    <!-- Wallpaper Mask Layer (only when opacity > 0) -->
     <div
-      class="fixed inset-0 -z-10 transition-all duration-700 pointer-events-none"
+      v-if="maskStyle.backgroundColor !== 'transparent'"
+      class="fixed inset-0 z-0 transition-all duration-700 pointer-events-none"
       :style="maskStyle"
     ></div>
 
@@ -123,7 +139,7 @@ onMounted(async () => {
 
     <!-- Crystal 100% Pure Transparent Login Card (Matching Image 1) -->
     <div
-      class="w-full max-w-[380px] sm:max-w-[400px] p-7 sm:p-8 rounded-[28px] border border-white/40 shadow-2xl space-y-6 transition-all animate-in fade-in zoom-in-95 duration-200"
+      class="relative z-10 w-full max-w-[380px] sm:max-w-[400px] p-7 sm:p-8 rounded-[28px] border border-white/40 shadow-2xl space-y-6 transition-all animate-in fade-in zoom-in-95 duration-200"
       style="background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;"
     >
       <!-- Card Top Bar: Theme Switcher Pill (Left) + Language Selector (Right) -->

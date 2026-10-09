@@ -203,9 +203,10 @@ function handleClick(e: MouseEvent) {
       </span>
     </div>
 
-    <!-- Bookmark Name (Pure white text with text shadow) -->
+    <!-- Bookmark Name (Pure white text with text shadow & dynamic opacity) -->
     <span
-      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate"
+      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate transition-opacity"
+      :style="{ opacity: settingsStore.textOpacity / 100 }"
     >
       {{ bookmark.name }}
     </span>

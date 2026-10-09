@@ -177,6 +177,8 @@ func seedDefaultData() error {
 		"cf_record_id":          "",
 		"ddns_status":           "idle",
 		"require_login":         "false",
+		"text_opacity":          "100",
+		"content_top_offset":    "6",
 	}
 
 	for k, v := range defaultSettings {

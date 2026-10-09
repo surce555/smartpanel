@@ -65,6 +65,41 @@ const iconSizes = [
       />
     </div>
 
+    <!-- Sliders: Text Opacity & Vertical Top Offset -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-1">
+      <div>
+        <div class="flex justify-between text-sm mb-1.5">
+          <span class="text-slate-700 dark:text-slate-300 font-medium">导航文字透明度</span>
+          <span class="text-indigo-600 dark:text-indigo-400 font-mono text-xs">{{ settingsStore.textOpacity }}%</span>
+        </div>
+        <input
+          type="range"
+          min="20"
+          max="100"
+          step="5"
+          v-model.number="settingsStore.textOpacity"
+          class="w-full accent-indigo-600 cursor-pointer"
+        />
+        <p class="text-[11px] text-slate-400 mt-1">调节全透明模式下书签和分组文字的透光程度</p>
+      </div>
+
+      <div>
+        <div class="flex justify-between text-sm mb-1.5">
+          <span class="text-slate-700 dark:text-slate-300 font-medium">标签位置整体上下偏移</span>
+          <span class="text-indigo-600 dark:text-indigo-400 font-mono text-xs">{{ settingsStore.contentTopOffset }}vh</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="50"
+          step="1"
+          v-model.number="settingsStore.contentTopOffset"
+          class="w-full accent-indigo-600 cursor-pointer"
+        />
+        <p class="text-[11px] text-slate-400 mt-1">整体下移或上移书签列表，避免遮挡壁纸人物关键区域</p>
+      </div>
+    </div>
+
     <!-- Shadow & Icon Size -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
       <div>

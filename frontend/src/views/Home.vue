@@ -67,6 +67,21 @@ async function handleSelectThemePreset(preset: 'crystal' | 'glass' | 'solid' | '
   showLauncherMenu.value = false
 }
 
+async function persistQuickAppearance() {
+  localStorage.setItem('smartpanel_text_opacity', String(settingsStore.textOpacity))
+  localStorage.setItem('smartpanel_content_top_offset', String(settingsStore.contentTopOffset))
+  if (authStore.isAuthenticated) {
+    try {
+      await settingsStore.saveSettings({
+        text_opacity: String(settingsStore.textOpacity),
+        content_top_offset: String(settingsStore.contentTopOffset),
+      })
+    } catch (e) {
+      // ignore
+    }
+  }
+}
+
 function handleOutsideClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.launcher-menu-container')) {
@@ -306,6 +321,43 @@ function toggleTag(tagId: string) {
         <CardSizeSwitcher />
       </div>
 
+      <!-- Appearance Fine-tuning: Font Opacity & Label Vertical Position Offset -->
+      <div class="pt-2.5 border-t border-white/10 space-y-2.5">
+        <!-- Font Opacity Slider -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-white/70">
+            <span>字体透明度</span>
+            <span class="font-mono text-indigo-400">{{ settingsStore.textOpacity }}%</span>
+          </div>
+          <input
+            type="range"
+            min="20"
+            max="100"
+            step="5"
+            v-model.number="settingsStore.textOpacity"
+            @change="persistQuickAppearance"
+            class="w-full accent-indigo-500 cursor-pointer"
+          />
+        </div>
+
+        <!-- Vertical Offset Slider -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-white/70">
+            <span>标签上下位置 (整体垂直偏移)</span>
+            <span class="font-mono text-indigo-400">{{ settingsStore.contentTopOffset }}vh</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="50"
+            step="1"
+            v-model.number="settingsStore.contentTopOffset"
+            @change="persistQuickAppearance"
+            class="w-full accent-indigo-500 cursor-pointer"
+          />
+        </div>
+      </div>
+
       <!-- Quick Actions -->
       <div class="pt-2 border-t border-white/10 space-y-1.5">
         <button
@@ -402,8 +454,13 @@ function toggleTag(tagId: string) {
         </button>
       </div>
 
-      <!-- Groups and Bookmarks Display -->
-      <div class="w-full" :class="[settingsStore.cardStyle === 'transparent' ? 'pt-4 sm:pt-6' : '']">
+      <!-- Groups and Bookmarks Display with Adjustable Top Offset -->
+      <div
+        class="w-full transition-all duration-300"
+        :style="{
+          paddingTop: `${settingsStore.contentTopOffset}vh`
+        }"
+      >
         <!-- If groups exist -->
         <template v-if="bookmarksStore.groupedBookmarks.length > 0">
           <GroupSection

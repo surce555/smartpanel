@@ -42,6 +42,13 @@ export const useSettingsStore = defineStore('settings', () => {
   const loginWallpaperBlur = ref<number>(0)
   const loginWallpaperMask = ref<number>(0)
 
+  const textOpacity = ref<number>(
+    parseInt(localStorage.getItem('smartpanel_text_opacity') || '100', 10) || 100
+  )
+  const contentTopOffset = ref<number>(
+    parseInt(localStorage.getItem('smartpanel_content_top_offset') || '6', 10) || 6
+  )
+
   const fontFamily = ref<string>('')
   const fontSize = ref<string>('16px')
 
@@ -84,15 +91,38 @@ export const useSettingsStore = defineStore('settings', () => {
       if (s.grid_cols_mobile) gridColsMobile.value = parseInt(s.grid_cols_mobile, 10) || 2
 
       if (s.wallpaper_type) wallpaperType.value = s.wallpaper_type
-      if (s.wallpaper_blur) wallpaperBlur.value = parseInt(s.wallpaper_blur, 10) || 0
-      if (s.wallpaper_mask) wallpaperMask.value = parseInt(s.wallpaper_mask, 10) || 20
+      if (s.wallpaper_blur !== undefined) wallpaperBlur.value = parseInt(s.wallpaper_blur, 10) || 0
+      if (s.wallpaper_mask !== undefined) {
+        const val = parseInt(s.wallpaper_mask, 10)
+        wallpaperMask.value = isNaN(val) ? 0 : val
+      }
       if (s.wallpaper_interval) wallpaperInterval.value = parseInt(s.wallpaper_interval, 10) || 60
-      if (s.wallpaper_url) wallpaperUrl.value = s.wallpaper_url
+      if (s.wallpaper_url !== undefined) {
+        wallpaperUrl.value = s.wallpaper_url
+        if (s.wallpaper_url) localStorage.setItem('smartpanel_wallpaper', s.wallpaper_url)
+      }
 
       if (s.login_wallpaper_type) loginWallpaperType.value = s.login_wallpaper_type
-      if (s.login_wallpaper_url) loginWallpaperUrl.value = s.login_wallpaper_url
-      if (s.login_wallpaper_blur) loginWallpaperBlur.value = parseInt(s.login_wallpaper_blur, 10) || 0
-      if (s.login_wallpaper_mask) loginWallpaperMask.value = parseInt(s.login_wallpaper_mask, 10) || 15
+      if (s.login_wallpaper_url !== undefined) {
+        loginWallpaperUrl.value = s.login_wallpaper_url
+        if (s.login_wallpaper_url) localStorage.setItem('smartpanel_login_wallpaper', s.login_wallpaper_url)
+      }
+      if (s.login_wallpaper_blur !== undefined) loginWallpaperBlur.value = parseInt(s.login_wallpaper_blur, 10) || 0
+      if (s.login_wallpaper_mask !== undefined) {
+        const val = parseInt(s.login_wallpaper_mask, 10)
+        loginWallpaperMask.value = isNaN(val) ? 0 : val
+      }
+
+      if (s.text_opacity !== undefined) {
+        const val = parseInt(s.text_opacity, 10)
+        textOpacity.value = isNaN(val) ? 100 : val
+        localStorage.setItem('smartpanel_text_opacity', String(textOpacity.value))
+      }
+      if (s.content_top_offset !== undefined) {
+        const val = parseInt(s.content_top_offset, 10)
+        contentTopOffset.value = isNaN(val) ? 6 : val
+        localStorage.setItem('smartpanel_content_top_offset', String(contentTopOffset.value))
+      }
 
       if (s.font_family) fontFamily.value = s.font_family
       if (s.font_size) fontSize.value = s.font_size
@@ -220,6 +250,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loginWallpaperUrl,
     loginWallpaperBlur,
     loginWallpaperMask,
+    textOpacity,
+    contentTopOffset,
     fontFamily,
     fontSize,
     searchEngine,

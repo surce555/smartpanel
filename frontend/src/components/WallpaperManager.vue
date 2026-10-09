@@ -85,16 +85,24 @@ async function deleteWallpaper(filename: string) {
 function selectAsHomeWallpaper(url: string) {
   settingsStore.wallpaperUrl = url
   settingsStore.wallpaperType = 'upload'
+  localStorage.setItem('smartpanel_wallpaper', url)
 }
 
 function selectAsLoginWallpaper(url: string) {
   settingsStore.loginWallpaperUrl = url
   settingsStore.loginWallpaperType = 'upload'
+  localStorage.setItem('smartpanel_login_wallpaper', url)
 }
 
 async function handleSave() {
   saveMsg.value = ''
   try {
+    if (settingsStore.wallpaperUrl) {
+      localStorage.setItem('smartpanel_wallpaper', settingsStore.wallpaperUrl)
+    }
+    if (settingsStore.loginWallpaperUrl) {
+      localStorage.setItem('smartpanel_login_wallpaper', settingsStore.loginWallpaperUrl)
+    }
     await settingsStore.saveSettings({
       wallpaper_type: settingsStore.wallpaperType,
       wallpaper_url: settingsStore.wallpaperUrl,

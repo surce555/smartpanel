@@ -32,22 +32,23 @@ async function handleEmptyDrop(e: DragEvent) {
 
 <template>
   <section class="mb-8 last:mb-2">
-    <!-- Group Header in Transparent Mode (Matching Image 4: e.g. APP +) -->
+    <!-- Group Header in Transparent Mode (Matching Image 4 & Screenshot 2: e.g. APP +) -->
     <div
       v-if="settingsStore.cardStyle === 'transparent'"
       class="flex items-center gap-2 mb-3 px-1 select-none"
     >
       <h2
-        class="text-base sm:text-lg font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] tracking-wide cursor-pointer flex items-center gap-2"
+        class="text-base sm:text-lg font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] tracking-wide cursor-pointer flex items-center gap-2 transition-opacity"
+        :style="{ opacity: settingsStore.textOpacity / 100 }"
         @click="isCollapsed = !isCollapsed"
       >
         <span>{{ group.name }}</span>
       </h2>
       <button
-        v-if="authStore.isAuthenticated"
         type="button"
         @click.stop="emit('add-bookmark', group.id)"
-        class="text-white/80 hover:text-white transition-colors p-0.5 cursor-pointer"
+        class="text-white/80 hover:text-white transition-all p-0.5 cursor-pointer hover:scale-110 active:scale-95"
+        :style="{ opacity: settingsStore.textOpacity / 100 }"
         title="在此分组添加新卡片"
       >
         <Icon icon="tabler:plus" class="w-4 h-4 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]" />
