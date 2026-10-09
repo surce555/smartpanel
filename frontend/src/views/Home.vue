@@ -28,8 +28,9 @@ const editingBookmark = ref<Bookmark | null>(null)
 const targetGroupId = ref<string>('')
 const showLauncherMenu = ref<boolean>(false)
 
-// Quick search in launcher popover
-const launcherSearchQuery = ref<string>('')
+function isCardStyle(style: string): boolean {
+  return settingsStore.cardStyle === style
+}
 
 function handleAddBookmark(groupId?: string) {
   if (!authStore.isAuthenticated) {
@@ -125,152 +126,13 @@ function toggleTag(tagId: string) {
       >
         <Icon icon="tabler:apps" class="w-5 h-5" />
       </button>
-
-      <!-- Launcher Dropdown Popover in Transparent Mode -->
-      <div
-        v-if="showLauncherMenu"
-        @click.stop
-        class="absolute right-0 mt-2 w-72 sm:w-80 p-4 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl text-white text-xs z-50 space-y-3.5 animate-in fade-in zoom-in-95"
-      >
-        <!-- Popover Header -->
-        <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-white text-sm flex items-center gap-1.5">
-              <Icon icon="tabler:apps" class="w-4 h-4 text-indigo-400" />
-              快捷控制中心
-            </span>
-            <NetworkRouteBadge />
-          </div>
-          <button @click="showLauncherMenu = false" class="text-white/60 hover:text-white p-1">✕</button>
-        </div>
-
-        <!-- Quick Search inside Popover -->
-        <div class="relative">
-          <input
-            type="text"
-            v-model="bookmarksStore.searchQuery"
-            placeholder="搜索当前书签..."
-            class="w-full px-3 py-2 pl-8 rounded-xl bg-white/10 border border-white/15 text-white placeholder-white/40 text-xs focus:outline-none focus:border-indigo-400"
-          />
-          <Icon icon="tabler:search" class="w-4 h-4 text-white/50 absolute left-2.5 top-2.5" />
-        </div>
-
-        <!-- Theme Presets Switcher -->
-        <div class="space-y-1.5">
-          <span class="text-[11px] font-semibold text-white/70">预制主题样式</span>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              @click="handleSelectThemePreset('crystal')"
-              class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-              :class="[
-                settingsStore.cardStyle === 'transparent'
-                  ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                  : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-              ]"
-            >
-              <span class="text-xs">✨ 全透明模式</span>
-              <span class="text-[10px] text-white/60">原图纯净文字</span>
-            </button>
-
-            <button
-              type="button"
-              @click="handleSelectThemePreset('glass')"
-              class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-              :class="[
-                settingsStore.cardStyle === 'glass'
-                  ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                  : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-              ]"
-            >
-              <span class="text-xs">🧊 经典毛玻璃</span>
-              <span class="text-[10px] text-white/60">半透亚克力卡片</span>
-            </button>
-
-            <button
-              type="button"
-              @click="handleSelectThemePreset('solid')"
-              class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-              :class="[
-                settingsStore.cardStyle === 'solid'
-                  ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                  : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-              ]"
-            >
-              <span class="text-xs">◻️ 纯色卡片</span>
-              <span class="text-[10px] text-white/60">清晰实体质感</span>
-            </button>
-
-            <button
-              type="button"
-              @click="handleSelectThemePreset('minimal')"
-              class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-              :class="[
-                settingsStore.cardStyle === 'minimal'
-                  ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                  : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-              ]"
-            >
-              <span class="text-xs">▫️ 极简线条</span>
-              <span class="text-[10px] text-white/60">无边框平铺</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Card Size Toggle -->
-        <div class="pt-2 border-t border-white/10 flex items-center justify-between">
-          <span class="text-[11px] font-semibold text-white/70">排列密度</span>
-          <CardSizeSwitcher />
-        </div>
-
-        <!-- Quick Actions -->
-        <div class="pt-2 border-t border-white/10 space-y-1.5">
-          <button
-            v-if="authStore.isAuthenticated"
-            type="button"
-            @click="handleAddBookmark()"
-            class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon icon="tabler:plus" class="w-4 h-4" />
-            <span>添加书签卡片</span>
-          </button>
-
-          <button
-            v-if="authStore.isAuthenticated"
-            type="button"
-            @click="handleAddTag()"
-            class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon icon="tabler:tag" class="w-4 h-4" />
-            <span>新建分类标签</span>
-          </button>
-
-          <router-link
-            v-if="authStore.isAuthenticated"
-            to="/admin"
-            class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon icon="tabler:settings" class="w-4 h-4" />
-            <span>进入管理后台</span>
-          </router-link>
-
-          <router-link
-            v-else
-            to="/login"
-            class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <Icon icon="tabler:login" class="w-4 h-4" />
-            <span>管理员登录</span>
-          </router-link>
-        </div>
-      </div>
     </div>
 
     <!-- ========================================== -->
     <!-- 2. STANDARD HEADER (Non-Transparent Modes) -->
     <!-- ========================================== -->
     <header
-      v-if="settingsStore.cardStyle !== 'transparent'"
+      v-else
       class="flex items-center justify-between gap-3 mb-6 sm:mb-8"
     >
       <!-- Left: Logo & Network Indicator -->
@@ -340,136 +202,154 @@ function toggleTag(tagId: string) {
           >
             <Icon icon="tabler:apps" class="w-5 h-5" />
           </button>
-
-          <!-- Standard Dropdown Popover -->
-          <div
-            v-if="showLauncherMenu"
-            @click.stop
-            class="absolute right-0 mt-2 w-72 p-3.5 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl text-white text-xs z-50 space-y-3 animate-in fade-in zoom-in-95"
-          >
-            <div class="flex items-center justify-between border-b border-white/10 pb-2">
-              <span class="font-bold text-white text-xs flex items-center gap-1.5">
-                <Icon icon="tabler:apps" class="w-4 h-4 text-indigo-400" />
-                快捷控制中心
-              </span>
-              <button @click="showLauncherMenu = false" class="text-white/60 hover:text-white">✕</button>
-            </div>
-
-            <!-- Theme Presets -->
-            <div class="space-y-1.5">
-              <span class="text-[11px] font-semibold text-white/80">预制主题样式</span>
-              <div class="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  @click="handleSelectThemePreset('crystal')"
-                  class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-                  :class="[
-                    settingsStore.cardStyle === 'transparent'
-                      ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                      : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-                  ]"
-                >
-                  <span class="text-xs">✨ 全透明模式</span>
-                  <span class="text-[10px] text-white/60">原图纯净卡片</span>
-                </button>
-
-                <button
-                  type="button"
-                  @click="handleSelectThemePreset('glass')"
-                  class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-                  :class="[
-                    settingsStore.cardStyle === 'glass'
-                      ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                      : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-                  ]"
-                >
-                  <span class="text-xs">🧊 经典毛玻璃</span>
-                  <span class="text-[10px] text-white/60">半透亚克力效果</span>
-                </button>
-
-                <button
-                  type="button"
-                  @click="handleSelectThemePreset('solid')"
-                  class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-                  :class="[
-                    settingsStore.cardStyle === 'solid'
-                      ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                      : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-                  ]"
-                >
-                  <span class="text-xs">◻️ 纯色卡片</span>
-                  <span class="text-[10px] text-white/60">清晰实体质感</span>
-                </button>
-
-                <button
-                  type="button"
-                  @click="handleSelectThemePreset('minimal')"
-                  class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
-                  :class="[
-                    settingsStore.cardStyle === 'minimal'
-                      ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
-                      : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
-                  ]"
-                >
-                  <span class="text-xs">▫️ 极简线条</span>
-                  <span class="text-[10px] text-white/60">无边框平铺</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Card Size Toggle -->
-            <div class="pt-2 border-t border-white/10 flex items-center justify-between">
-              <span class="text-[11px] font-semibold text-white/80">卡片图标尺寸</span>
-              <CardSizeSwitcher />
-            </div>
-
-            <!-- Actions -->
-            <div class="pt-2 border-t border-white/10 space-y-1.5">
-              <button
-                v-if="authStore.isAuthenticated"
-                type="button"
-                @click="handleAddBookmark()"
-                class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Icon icon="tabler:plus" class="w-4 h-4" />
-                <span>快捷添加书签卡片</span>
-              </button>
-
-              <button
-                v-if="authStore.isAuthenticated"
-                type="button"
-                @click="handleAddTag()"
-                class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Icon icon="tabler:tag" class="w-4 h-4" />
-                <span>新建分类标签</span>
-              </button>
-
-              <router-link
-                v-if="authStore.isAuthenticated"
-                to="/admin"
-                class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Icon icon="tabler:settings" class="w-4 h-4" />
-                <span>进入管理后台</span>
-              </router-link>
-
-              <router-link
-                v-else
-                to="/login"
-                class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Icon icon="tabler:login" class="w-4 h-4" />
-                <span>管理员登录</span>
-              </router-link>
-            </div>
-          </div>
         </div>
       </div>
     </header>
 
     <!-- ========================================== -->
-    <!-- 3. MAIN CONTENT                            -->
+    <!-- 3. UNIFIED LAUNCHER POPOVER MENU           -->
+    <!-- Positioned cleanly at top right            -->
+    <!-- ========================================== -->
+    <div
+      v-if="showLauncherMenu"
+      @click.stop
+      class="launcher-menu-container fixed top-16 right-4 sm:right-6 w-72 sm:w-80 p-4 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-white/20 shadow-2xl text-white text-xs z-50 space-y-3.5 animate-in fade-in zoom-in-95"
+    >
+      <!-- Popover Header -->
+      <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-white text-sm flex items-center gap-1.5">
+            <Icon icon="tabler:apps" class="w-4 h-4 text-indigo-400" />
+            快捷控制中心
+          </span>
+          <NetworkRouteBadge />
+        </div>
+        <button @click="showLauncherMenu = false" class="text-white/60 hover:text-white p-1">✕</button>
+      </div>
+
+      <!-- Quick Search inside Popover -->
+      <div class="relative">
+        <input
+          type="text"
+          v-model="bookmarksStore.searchQuery"
+          placeholder="搜索当前书签..."
+          class="w-full px-3 py-2 pl-8 rounded-xl bg-white/10 border border-white/15 text-white placeholder-white/40 text-xs focus:outline-none focus:border-indigo-400"
+        />
+        <Icon icon="tabler:search" class="w-4 h-4 text-white/50 absolute left-2.5 top-2.5" />
+      </div>
+
+      <!-- Theme Presets Switcher -->
+      <div class="space-y-1.5">
+        <span class="text-[11px] font-semibold text-white/70">预制主题样式</span>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            @click="handleSelectThemePreset('crystal')"
+            class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
+            :class="[
+              isCardStyle('transparent')
+                ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
+                : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
+            ]"
+          >
+            <span class="text-xs">✨ 全透明模式</span>
+            <span class="text-[10px] text-white/60">原图纯净文字</span>
+          </button>
+
+          <button
+            type="button"
+            @click="handleSelectThemePreset('glass')"
+            class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
+            :class="[
+              isCardStyle('glass')
+                ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
+                : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
+            ]"
+          >
+            <span class="text-xs">🧊 经典毛玻璃</span>
+            <span class="text-[10px] text-white/60">半透亚克力卡片</span>
+          </button>
+
+          <button
+            type="button"
+            @click="handleSelectThemePreset('solid')"
+            class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
+            :class="[
+              isCardStyle('solid')
+                ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
+                : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
+            ]"
+          >
+            <span class="text-xs">◻️ 纯色卡片</span>
+            <span class="text-[10px] text-white/60">清晰实体质感</span>
+          </button>
+
+          <button
+            type="button"
+            @click="handleSelectThemePreset('minimal')"
+            class="px-2.5 py-2 rounded-xl text-left border transition-all flex flex-col gap-0.5"
+            :class="[
+              isCardStyle('minimal')
+                ? 'border-indigo-500 bg-indigo-600/30 text-white font-semibold'
+                : 'border-white/10 hover:border-white/30 bg-white/5 text-white/90'
+            ]"
+          >
+            <span class="text-xs">▫️ 极简线条</span>
+            <span class="text-[10px] text-white/60">无边框平铺</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card Size Toggle -->
+      <div class="pt-2 border-t border-white/10 flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-white/70">排列密度</span>
+        <CardSizeSwitcher />
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="pt-2 border-t border-white/10 space-y-1.5">
+        <button
+          v-if="authStore.isAuthenticated"
+          type="button"
+          @click="handleAddBookmark()"
+          class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <Icon icon="tabler:plus" class="w-4 h-4" />
+          <span>添加书签卡片</span>
+        </button>
+
+        <button
+          v-if="authStore.isAuthenticated"
+          type="button"
+          @click="handleAddTag()"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <Icon icon="tabler:tag" class="w-4 h-4" />
+          <span>新建分类标签</span>
+        </button>
+
+        <router-link
+          v-if="authStore.isAuthenticated"
+          to="/admin"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <Icon icon="tabler:settings" class="w-4 h-4" />
+          <span>进入管理后台</span>
+        </router-link>
+
+        <router-link
+          v-else
+          to="/login"
+          class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <Icon icon="tabler:login" class="w-4 h-4" />
+          <span>管理员登录</span>
+        </router-link>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 4. MAIN CONTENT                            -->
     <!-- ========================================== -->
     <main class="flex-1 flex flex-col items-center w-full">
       <!-- Search Bar (Hidden in transparent mode) -->
