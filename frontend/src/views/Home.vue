@@ -16,6 +16,7 @@ import QuickTagModal from '@/components/QuickTagModal.vue'
 import NetworkRouteBadge from '@/components/NetworkRouteBadge.vue'
 import SpotlightSearch from '@/components/SpotlightSearch.vue'
 import QuickMemoModal from '@/components/QuickMemoModal.vue'
+import DockerManagerModal from '@/components/DockerManagerModal.vue'
 
 import { useTheme } from '@/composables/useTheme'
 
@@ -31,6 +32,7 @@ const showBookmarkModal = ref<boolean>(false)
 const showTagModal = ref<boolean>(false)
 const showSpotlight = ref<boolean>(false)
 const showMemoModal = ref<boolean>(false)
+const showDockerModal = ref<boolean>(false)
 const isZenMode = ref<boolean>(false)
 const zenTime = ref<string>('')
 const zenDate = ref<string>('')
@@ -509,6 +511,20 @@ function toggleTag(tagId: string) {
           <kbd class="px-1.5 py-0.2 rounded bg-black/30 text-[10px] text-white/50 font-mono">按 Z</kbd>
         </button>
 
+        <!-- Docker Management & Monitoring -->
+        <button
+          v-if="authStore.isAuthenticated"
+          type="button"
+          @click="showDockerModal = true; showLauncherMenu = false"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-between text-xs transition-colors cursor-pointer"
+        >
+          <div class="flex items-center gap-1.5">
+            <Icon icon="tabler:brand-docker" class="w-4 h-4 text-sky-400" />
+            <span>Docker 容器监控管理</span>
+          </div>
+          <span class="px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-bold text-[10px]">PRO</span>
+        </button>
+
         <button
           v-if="authStore.isAuthenticated"
           type="button"
@@ -664,6 +680,12 @@ function toggleTag(tagId: string) {
     <QuickMemoModal
       :show="showMemoModal"
       @close="showMemoModal = false"
+    />
+
+    <!-- Docker Container Monitor & Manager Modal -->
+    <DockerManagerModal
+      :show="showDockerModal"
+      @close="showDockerModal = false"
     />
 
     <!-- Zen Screensaver Ambient Clock Overlay -->

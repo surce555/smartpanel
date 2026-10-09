@@ -117,10 +117,13 @@ type SystemStatusResponse struct {
 }
 
 type DockerContainerInfo struct {
-	ID      string   `json:"id"`
-	Names   []string `json:"names"`
-	Image   string   `json:"image"`
-	State   string   `json:"state"`
-	Status  string   `json:"status"`
-	Created int64    `json:"created"`
+	ID          string   `json:"id"`
+	Names       []string `json:"names"`
+	Image       string   `json:"image"`
+	State       string   `json:"state"`
+	Status      string   `json:"status"`
+	Created     int64    `json:"created"`
+	CPUPercent  float64  `json:"cpu_percent"`
+	RAMUsageStr string   `json:"ram_usage_str"`
+	RAMBytes    uint64   `json:"ram_bytes"`
 }

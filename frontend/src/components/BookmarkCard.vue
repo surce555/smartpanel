@@ -180,12 +180,12 @@ function handleClick(e: MouseEvent) {
     @dragleave="handleDragLeave"
     @drop.prevent="handleDrop"
     @click="handleClick"
-    class="group relative inline-flex items-center justify-start py-1 px-1 transition-transform duration-200 cursor-pointer select-none hover:scale-105 active:scale-95"
+    class="group relative flex w-full items-center justify-center py-1.5 px-2 transition-transform duration-200 cursor-pointer select-none hover:scale-105 active:scale-95 text-center"
   >
     <!-- Hover Action Handle (Drag grip + Quick edit) for Admin -->
     <div
       v-if="authStore.isAuthenticated"
-      class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
+      class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
     >
       <button
         type="button"
@@ -205,11 +205,11 @@ function handleClick(e: MouseEvent) {
 
     <!-- Bookmark Name (Pure white text with text shadow & dynamic opacity) -->
     <span
-      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate transition-opacity flex items-center gap-1"
+      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate transition-opacity flex items-center justify-center gap-1 w-full text-center"
       :style="{ opacity: settingsStore.textOpacity / 100 }"
     >
       <Icon v-if="bookmark.is_private" icon="tabler:lock" class="w-3.5 h-3.5 text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] shrink-0" title="私密书签" />
-      <span>{{ bookmark.name }}</span>
+      <span class="truncate">{{ bookmark.name }}</span>
     </span>
   </a>
 

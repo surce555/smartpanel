@@ -116,9 +116,13 @@ func main() {
 			admin.GET("/upload/list", uploadH.ListUploadedFiles)
 			admin.DELETE("/upload/:filename", uploadH.DeleteUploadedFile)
 
-			// System & Docker monitoring
+			// System & Docker monitoring & container control
 			admin.GET("/system/status", systemH.GetSystemStatus)
 			admin.GET("/system/docker", dockerH.GetDockerContainers)
+			admin.POST("/system/docker/:id/start", dockerH.StartContainer)
+			admin.POST("/system/docker/:id/stop", dockerH.StopContainer)
+			admin.POST("/system/docker/:id/restart", dockerH.RestartContainer)
+			admin.GET("/system/docker/:id/logs", dockerH.GetContainerLogs)
 			admin.POST("/system/network/check", networkH.CheckNetwork)
 
 			// Backup & Restore
