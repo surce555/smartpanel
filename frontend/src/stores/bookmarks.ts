@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useSettingsStore, NetworkInfo } from './settings'
-import { useIPv6Probe } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
 
 export interface Tag {
   id: string
@@ -53,40 +53,86 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   const draggingBookmarkId = ref<string | null>(null)
 
   const settingsStore = useSettingsStore()
-  const { isIPv6Available } = useIPv6Probe()
+  const { isIPv6Available, routePreference } = useIPv6Probe()
 
-  /**
-   * Resolve final URL for a bookmark dynamically based on network state
-   */
-  function resolveBookmarkUrl(b: Bookmark): string {
-    const net = settingsStore.networkInfo
-    const hasV6 = isIPv6Available.value !== false // Default to direct if true or not probed yet
+  function getInternalUrl(b: Bookmark): string {
+    return b.url_internal ? b.url_internal.trim() : ''
+  }
 
-    let template = b.url_public_template
-    if (!template) {
-      // Fallback to internal or fallback
-      return b.url_internal || b.url_fallback || '#'
+  function getV6Url(b: Bookmark, net: NetworkInfo): string {
+    if (!b.url_public_template) return ''
+    let cleanV6 = (net.current_ipv6 || net.detected_host_ipv6 || '').trim()
+    if (!cleanV6 && isIPv6Host(window.location.hostname)) {
+      cleanV6 = window.location.hostname.replace(/^\[|\]$/g, '')
     }
-
-    // If client is determined to NOT have IPv6 connectivity, fallback to Tunnel domain or url_fallback
-    if (!hasV6) {
-      if (b.url_fallback) {
-        return b.url_fallback
-          .replace(/{domain}/g, net.domain || window.location.hostname)
-          .replace(/{v6domain}/g, net.v6domain || '')
-      }
+    const tmpl = b.url_public_template.trim()
+    if (tmpl.includes('{ipv6}') && !cleanV6) {
+      return ''
     }
-
-    // Standard template substitution:
-    // Format IPv6 cleanly, ensuring brackets if template is like https://[{ipv6}]:port or https://{ipv6}:port
-    let cleanV6 = net.current_ipv6 || ''
-
-    let resolved = template
+    if (tmpl.includes('{v6domain}') && !net.v6domain) {
+      return ''
+    }
+    return tmpl
       .replace(/{ipv6}/g, cleanV6)
       .replace(/{domain}/g, net.domain || window.location.hostname)
       .replace(/{v6domain}/g, net.v6domain || '')
+  }
 
-    return resolved
+  function getFallbackUrl(b: Bookmark, net: NetworkInfo): string {
+    if (!b.url_fallback) return ''
+    return b.url_fallback.trim()
+      .replace(/{domain}/g, net.domain || window.location.hostname)
+      .replace(/{v6domain}/g, net.v6domain || '')
+      .replace(/{ipv6}/g, net.current_ipv6 || net.detected_host_ipv6 || '')
+  }
+
+  /**
+   * Resolve final URL for a bookmark dynamically based on network state
+   * Priority hierarchy:
+   * 1. 内网直连 (url_internal)
+   * 2. IPv6 直连 (url_public_template)
+   * 3. 域名代理回退 (url_fallback)
+   */
+  function resolveBookmarkUrl(b: Bookmark): string {
+    const net = settingsStore.networkInfo
+    const pref = routePreference.value
+    const internalUrl = getInternalUrl(b)
+    const v6Url = getV6Url(b, net)
+    const fallbackUrl = getFallbackUrl(b, net)
+
+    // 1. Explicit preference overrides
+    if (pref === 'lan') {
+      return internalUrl || v6Url || fallbackUrl || '#'
+    }
+    if (pref === 'ipv6') {
+      return v6Url || internalUrl || fallbackUrl || '#'
+    }
+    if (pref === 'domain') {
+      return fallbackUrl || v6Url || internalUrl || '#'
+    }
+
+    // 2. Auto Routing (智能优选: 内网 ➔ IPv6 ➔ 域名)
+    const hostname = window.location.hostname
+
+    // (a) Visiting via LAN IP / hostname: prioritize internal URL
+    if (isLanHost(hostname)) {
+      return internalUrl || v6Url || fallbackUrl || '#'
+    }
+
+    // (b) Visiting via IPv6 host: prioritize IPv6 template
+    if (isIPv6Host(hostname)) {
+      return v6Url || internalUrl || fallbackUrl || '#'
+    }
+
+    // (c) Visiting via Domain (e.g. pan.yourdomain.com):
+    // Prioritize IPv6 if available; fallback to domain proxy; finally fallback to internal
+    if (isIPv6Available.value !== false && v6Url) {
+      return v6Url
+    }
+    if (fallbackUrl) {
+      return fallbackUrl
+    }
+    return internalUrl || v6Url || '#'
   }
 
   // Filtered bookmarks

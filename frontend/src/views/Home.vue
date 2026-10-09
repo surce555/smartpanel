@@ -13,6 +13,7 @@ import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import CardSizeSwitcher from '@/components/CardSizeSwitcher.vue'
 import QuickBookmarkModal from '@/components/QuickBookmarkModal.vue'
 import QuickTagModal from '@/components/QuickTagModal.vue'
+import NetworkRouteBadge from '@/components/NetworkRouteBadge.vue'
 
 const router = useRouter()
 const bookmarksStore = useBookmarksStore()
@@ -100,6 +101,7 @@ onMounted(async () => {
   }
   updateClock()
   clockTimer = window.setInterval(updateClock, 1000)
+  probeIPv6()
   await bookmarksStore.fetchAll()
 })
 
@@ -130,29 +132,8 @@ function toggleTag(tagId: string) {
             <h1 class="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               SmartPanel
             </h1>
-            <!-- Smart Routing Mode Badge -->
-            <span
-              v-if="isIPv6Available === true"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-              title="当前网络已通过 IPv6 高速直连 NAS"
-            >
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              IPv6 直连
-            </span>
-            <span
-              v-else-if="isIPv6Available === false"
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100/80 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
-              title="当前无 IPv6 环境，自动走 Cloudflare 代理通道"
-            >
-              <span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
-              CF 代理
-            </span>
-            <span
-              v-else
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700"
-            >
-              探测中...
-            </span>
+            <!-- Interactive Network Route Badge & Priority Switcher -->
+            <NetworkRouteBadge />
           </div>
           <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
             智能双栈 NAS 个人仪表盘
