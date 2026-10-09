@@ -5,10 +5,10 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
 # Install pnpm directly
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 
-COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/.npmrc* ./
-RUN pnpm install --frozen-lockfile=false
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
+RUN pnpm install
 
 COPY frontend/ ./
 RUN pnpm run build
