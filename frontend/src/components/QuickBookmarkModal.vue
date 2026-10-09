@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useBookmarksStore, Bookmark, Tag } from '@/stores/bookmarks'
+import { useApi } from '@/composables/useApi'
 
 const props = defineProps<{
   show: boolean
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const bookmarksStore = useBookmarksStore()
+const fetchingFavicon = ref(false)
 
 const form = ref({
   id: '',
@@ -129,6 +131,34 @@ async function handleSave() {
 function fillTemplate(tmpl: string) {
   form.value.url_public_template = tmpl
 }
+
+async function autoFetchIcon() {
+  const targetUrl = form.value.url_internal || form.value.url_fallback || form.value.url_public_template
+  if (!targetUrl) {
+    alert('请先输入内网地址、中继域名或外网动态模板地址')
+    return
+  }
+  fetchingFavicon.value = true
+  try {
+    const api = useApi()
+    const res = await api.get(`/bookmarks/fetch-favicon?url=${encodeURIComponent(targetUrl)}`)
+    const data = res.data
+    if (data.title && !form.value.name) {
+      form.value.name = data.title
+    }
+    if (data.google_favicon) {
+      form.value.icon = data.google_favicon
+    } else if (data.icon_url) {
+      form.value.icon = data.icon_url
+    } else if (data.suggested_icon) {
+      form.value.icon = data.suggested_icon
+    }
+  } catch (e: any) {
+    alert('抓取失败，请手动选择图标')
+  } finally {
+    fetchingFavicon.value = false
+  }
+}
 </script>
 
 <template>
@@ -174,9 +204,21 @@ function fillTemplate(tmpl: string) {
 
         <!-- Icon Picker & Presets -->
         <div>
-          <label class="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-            图标 (Iconify 名称如 tabler:server，或图片/SVG 地址)
-          </label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-medium text-slate-700 dark:text-slate-300">
+              图标 (Iconify 名称如 tabler:server，或图片/SVG 地址)
+            </label>
+            <button
+              type="button"
+              @click="autoFetchIcon"
+              :disabled="fetchingFavicon"
+              class="px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+              title="根据输入的网址自动识别并抓取高清图标和标题"
+            >
+              <Icon :icon="fetchingFavicon ? 'tabler:loader-2' : 'tabler:sparkles'" class="w-3.5 h-3.5" :class="{ 'animate-spin': fetchingFavicon }" />
+              <span>{{ fetchingFavicon ? '抓取中...' : '智能抓取' }}</span>
+            </button>
+          </div>
           <div class="flex items-center gap-2">
             <input
               v-model="form.icon"

@@ -14,6 +14,8 @@ import CardSizeSwitcher from '@/components/CardSizeSwitcher.vue'
 import QuickBookmarkModal from '@/components/QuickBookmarkModal.vue'
 import QuickTagModal from '@/components/QuickTagModal.vue'
 import NetworkRouteBadge from '@/components/NetworkRouteBadge.vue'
+import SpotlightSearch from '@/components/SpotlightSearch.vue'
+import QuickMemoModal from '@/components/QuickMemoModal.vue'
 
 const router = useRouter()
 const bookmarksStore = useBookmarksStore()
@@ -24,6 +26,13 @@ const { probeIPv6 } = useIPv6Probe()
 // Modals state
 const showBookmarkModal = ref<boolean>(false)
 const showTagModal = ref<boolean>(false)
+const showSpotlight = ref<boolean>(false)
+const showMemoModal = ref<boolean>(false)
+const isZenMode = ref<boolean>(false)
+const zenTime = ref<string>('')
+const zenDate = ref<string>('')
+let zenTimer: any = null
+let idleTimer: any = null
 const editingBookmark = ref<Bookmark | null>(null)
 const targetGroupId = ref<string>('')
 const showLauncherMenu = ref<boolean>(false)
@@ -106,6 +115,54 @@ watch(
   { immediate: true }
 )
 
+function resetIdleTimer() {
+  if (isZenMode.value) {
+    isZenMode.value = false
+  }
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(() => {
+    if (!showBookmarkModal.value && !showTagModal.value && !showSpotlight.value && !showMemoModal.value) {
+      isZenMode.value = true
+    }
+  }, 150000)
+}
+
+function updateZenClock() {
+  const now = new Date()
+  zenTime.value = now.toLocaleTimeString('zh-CN', { hour12: false })
+  zenDate.value = now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
+}
+
+function handleGlobalKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement
+  const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+
+  if (isZenMode.value) {
+    isZenMode.value = false
+    return
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    showSpotlight.value = !showSpotlight.value
+    return
+  }
+
+  if (e.key === '/' && !isInput) {
+    e.preventDefault()
+    showSpotlight.value = true
+    return
+  }
+
+  if ((e.key === 'z' || e.key === 'Z') && !isInput) {
+    e.preventDefault()
+    isZenMode.value = !isZenMode.value
+    return
+  }
+
+  resetIdleTimer()
+}
+
 onMounted(async () => {
   if (settingsStore.requireLogin && !authStore.isAuthenticated) {
     router.replace({ name: 'Login', query: { redirect: '/' } })
@@ -113,11 +170,26 @@ onMounted(async () => {
   }
   probeIPv6()
   window.addEventListener('click', handleOutsideClick)
+  window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('mousemove', resetIdleTimer)
+  window.addEventListener('mousedown', resetIdleTimer)
+  window.addEventListener('touchstart', resetIdleTimer)
+  window.addEventListener('scroll', resetIdleTimer)
+  zenTimer = setInterval(updateZenClock, 1000)
+  updateZenClock()
+  resetIdleTimer()
   await bookmarksStore.fetchAll()
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', handleOutsideClick)
+  window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('mousemove', resetIdleTimer)
+  window.removeEventListener('mousedown', resetIdleTimer)
+  window.removeEventListener('touchstart', resetIdleTimer)
+  window.removeEventListener('scroll', resetIdleTimer)
+  if (idleTimer) clearTimeout(idleTimer)
+  if (zenTimer) clearInterval(zenTimer)
 })
 
 function toggleTag(tagId: string) {
@@ -130,7 +202,10 @@ function toggleTag(tagId: string) {
 </script>
 
 <template>
-  <div class="relative min-h-[100dvh] flex flex-col justify-start p-3.5 sm:p-6 lg:p-8 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] max-w-7xl mx-auto">
+  <div
+    class="relative min-h-[100dvh] flex flex-col justify-start p-3.5 sm:p-6 lg:p-8 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] max-w-7xl mx-auto transition-all duration-700"
+    :class="{ 'opacity-0 pointer-events-none scale-95': isZenMode }"
+  >
     
     <!-- ========================================== -->
     <!-- 1. FLOATING LAUNCHER (Transparent Mode)    -->
@@ -383,12 +458,50 @@ function toggleTag(tagId: string) {
       </div>
 
       <!-- Quick Actions -->
-      <div class="pt-2 border-t border-white/10 space-y-1.5">
+        <!-- Spotlight Search -->
+        <button
+          type="button"
+          @click="showSpotlight = true; showLauncherMenu = false"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-between text-xs transition-colors cursor-pointer"
+        >
+          <div class="flex items-center gap-1.5">
+            <Icon icon="tabler:search" class="w-4 h-4 text-indigo-400" />
+            <span>全局快捷搜索</span>
+          </div>
+          <kbd class="px-1.5 py-0.2 rounded bg-black/30 text-[10px] text-white/50 font-mono">Ctrl+K</kbd>
+        </button>
+
+        <!-- Quick Memo / Clipboard -->
+        <button
+          type="button"
+          @click="showMemoModal = true; showLauncherMenu = false"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-between text-xs transition-colors cursor-pointer"
+        >
+          <div class="flex items-center gap-1.5">
+            <Icon icon="tabler:notes" class="w-4 h-4 text-emerald-400" />
+            <span>随手记 / 剪贴板</span>
+          </div>
+          <span class="text-[10px] text-white/50">云同步</span>
+        </button>
+
+        <!-- Zen Screensaver Mode -->
+        <button
+          type="button"
+          @click="isZenMode = true; showLauncherMenu = false"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-between text-xs transition-colors cursor-pointer"
+        >
+          <div class="flex items-center gap-1.5">
+            <Icon icon="tabler:sparkles" class="w-4 h-4 text-amber-400" />
+            <span>Zen 沉浸屏保</span>
+          </div>
+          <kbd class="px-1.5 py-0.2 rounded bg-black/30 text-[10px] text-white/50 font-mono">按 Z</kbd>
+        </button>
+
         <button
           v-if="authStore.isAuthenticated"
           type="button"
           @click="handleAddBookmark()"
-          class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors"
+          class="w-full px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
         >
           <Icon icon="tabler:plus" class="w-4 h-4" />
           <span>添加书签卡片</span>
@@ -398,10 +511,10 @@ function toggleTag(tagId: string) {
           v-if="authStore.isAuthenticated"
           type="button"
           @click="handleAddTag()"
-          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
+          class="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
         >
-          <Icon icon="tabler:tag" class="w-4 h-4" />
-          <span>新建分类标签</span>
+          <Icon icon="tabler:tags" class="w-4 h-4" />
+          <span>标签管理 / 新建</span>
         </button>
 
         <router-link
@@ -470,11 +583,11 @@ function toggleTag(tagId: string) {
           v-if="authStore.isAuthenticated"
           type="button"
           @click="handleAddTag"
-          class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700"
-          title="新增分类标签"
+          class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700 cursor-pointer"
+          title="管理或新建分类标签"
         >
-          <Icon icon="tabler:plus" class="w-3.5 h-3.5" />
-          <span>新建标签</span>
+          <Icon icon="tabler:tags" class="w-3.5 h-3.5" />
+          <span>管理 / 新建标签</span>
         </button>
       </div>
 
@@ -527,5 +640,46 @@ function toggleTag(tagId: string) {
       :show="showTagModal"
       @close="showTagModal = false"
     />
+
+    <!-- Global Spotlight / Raycast Search -->
+    <SpotlightSearch
+      :show="showSpotlight"
+      @close="showSpotlight = false"
+    />
+
+    <!-- Cross-device Quick Memo / Scratchpad -->
+    <QuickMemoModal
+      :show="showMemoModal"
+      @close="showMemoModal = false"
+    />
   </div>
+
+  <!-- Zen Screensaver Ambient Clock Overlay -->
+  <transition
+    enter-active-class="transition duration-500 ease-out"
+    enter-from-class="opacity-0"
+    enter-to-class="opacity-100"
+    leave-active-class="transition duration-300 ease-in"
+    leave-from-class="opacity-100"
+    leave-to-class="opacity-0"
+  >
+    <div
+      v-if="isZenMode"
+      @click="isZenMode = false"
+      class="fixed inset-0 z-50 flex flex-col items-center justify-center cursor-pointer select-none bg-black/25 backdrop-blur-[2px]"
+    >
+      <div class="text-center space-y-3 p-8 sm:p-12 rounded-3xl bg-black/30 backdrop-blur-md border border-white/10 shadow-2xl animate-pulse">
+        <div class="text-6xl sm:text-8xl md:text-9xl font-extralight tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.95)] font-mono">
+          {{ zenTime }}
+        </div>
+        <div class="text-base sm:text-xl font-light text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] tracking-widest">
+          {{ zenDate }}
+        </div>
+        <div class="pt-4 text-xs text-white/50 font-light flex items-center justify-center gap-1.5">
+          <Icon icon="tabler:sparkles" class="w-4 h-4 text-amber-400" />
+          <span>Zen 沉浸屏保模式 · 晃动鼠标或触控任意处退出</span>
+        </div>
+      </div>
+    </div>
+  </transition>
 </template>

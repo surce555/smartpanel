@@ -1,0 +1,16 @@
+{
+  "name": "SmartPanel NAS 导航",
+  "short_name": "SmartPanel",
+  "description": "极简纯净自适应 NAS 导航与控制面板",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

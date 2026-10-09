@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -555,3 +556,113 @@ func getTagsForBookmarks(bookmarkIDs []string) map[string][]models.Tag {
 
 	return res
 }
+
+func (h *BookmarkHandler) FetchFavicon(c *gin.Context) {
+	rawURL := strings.TrimSpace(c.Query("url"))
+	if rawURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "url 参数不能为空"})
+		return
+	}
+
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		rawURL = "http://" + rawURL
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 URL 格式"})
+		return
+	}
+
+	host := parsed.Host
+	hostname := parsed.Hostname()
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	// Smart keyword mapping to popular Tabler icons
+	lowerURL := strings.ToLower(rawURL)
+	suggestedIcon := "tabler:world"
+	if strings.Contains(lowerURL, "github") {
+		suggestedIcon = "tabler:brand-github"
+	} else if strings.Contains(lowerURL, "emby") || strings.Contains(lowerURL, "jellyfin") || strings.Contains(lowerURL, "plex") {
+		suggestedIcon = "tabler:movie"
+	} else if strings.Contains(lowerURL, "qbittorrent") || strings.Contains(lowerURL, "aria2") || strings.Contains(lowerURL, "transmission") {
+		suggestedIcon = "tabler:download"
+	} else if strings.Contains(lowerURL, "router") || strings.Contains(lowerURL, "openwrt") || strings.Contains(lowerURL, "ikuai") {
+		suggestedIcon = "tabler:router"
+	} else if strings.Contains(lowerURL, "pve") || strings.Contains(lowerURL, "proxmox") || strings.Contains(lowerURL, "esxi") {
+		suggestedIcon = "tabler:server"
+	} else if strings.Contains(lowerURL, "docker") || strings.Contains(lowerURL, "portainer") {
+		suggestedIcon = "tabler:brand-docker"
+	} else if strings.Contains(lowerURL, "homeassistant") || strings.Contains(lowerURL, "hass") {
+		suggestedIcon = "tabler:home-2"
+	} else if strings.Contains(lowerURL, "vaultwarden") || strings.Contains(lowerURL, "bitwarden") {
+		suggestedIcon = "tabler:shield-lock"
+	} else if strings.Contains(lowerURL, "nas") || strings.Contains(lowerURL, "synology") || strings.Contains(lowerURL, "nextcloud") {
+		suggestedIcon = "tabler:cloud"
+	} else if strings.Contains(lowerURL, "bilibili") {
+		suggestedIcon = "tabler:brand-bilibili"
+	} else if strings.Contains(lowerURL, "youtube") {
+		suggestedIcon = "tabler:brand-youtube"
+	}
+
+	iconURL := ""
+	title := ""
+
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	req, reqErr := http.NewRequest("GET", rawURL, nil)
+	if reqErr == nil {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+			bodyStr := string(bodyBytes)
+
+			// Extract title
+			reTitle := regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
+			if m := reTitle.FindStringSubmatch(bodyStr); len(m) > 1 {
+				title = strings.TrimSpace(html.UnescapeString(m[1]))
+			}
+
+			// Extract favicon link
+			reIcon := regexp.MustCompile(`(?i)<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']`)
+			if m := reIcon.FindStringSubmatch(bodyStr); len(m) > 1 {
+				foundHref := strings.TrimSpace(m[1])
+				if strings.HasPrefix(foundHref, "http://") || strings.HasPrefix(foundHref, "https://") {
+					iconURL = foundHref
+				} else if strings.HasPrefix(foundHref, "//") {
+					iconURL = scheme + ":" + foundHref
+				} else if strings.HasPrefix(foundHref, "/") {
+					iconURL = fmt.Sprintf("%s://%s%s", scheme, host, foundHref)
+				} else {
+					iconURL = fmt.Sprintf("%s://%s/%s", scheme, host, foundHref)
+				}
+			}
+		}
+	}
+
+	// Fallback: Direct host /favicon.ico
+	if iconURL == "" {
+		iconURL = fmt.Sprintf("%s://%s/favicon.ico", scheme, host)
+	}
+
+	// High-res public domain favicon fallback
+	googleFavicon := ""
+	if strings.Contains(hostname, ".") && !strings.HasPrefix(hostname, "192.168.") && !strings.HasPrefix(hostname, "10.") && !strings.HasPrefix(hostname, "172.") && hostname != "localhost" {
+		googleFavicon = fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=128", hostname)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"title":          title,
+		"icon_url":       iconURL,
+		"google_favicon": googleFavicon,
+		"suggested_icon": suggestedIcon,
+	})
+}
+

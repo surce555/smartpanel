@@ -205,10 +205,11 @@ function handleClick(e: MouseEvent) {
 
     <!-- Bookmark Name (Pure white text with text shadow & dynamic opacity) -->
     <span
-      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate transition-opacity"
+      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate transition-opacity flex items-center gap-1"
       :style="{ opacity: settingsStore.textOpacity / 100 }"
     >
-      {{ bookmark.name }}
+      <Icon v-if="bookmark.is_private" icon="tabler:lock" class="w-3.5 h-3.5 text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] shrink-0" title="私密书签" />
+      <span>{{ bookmark.name }}</span>
     </span>
   </a>
 

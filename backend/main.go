@@ -50,6 +50,7 @@ func main() {
 	healthH := &handlers.HealthHandler{}
 	networkH := &handlers.NetworkHandler{}
 	backupH := &handlers.BackupHandler{}
+	memoH := &handlers.MemoHandler{}
 
 	api := r.Group("/api")
 	{
@@ -78,6 +79,9 @@ func main() {
 		api.GET("/system/network/stream", networkH.StreamNetworkUpdates)
 		api.GET("/health/all", healthH.CheckAllHealth)
 		api.GET("/health/check/:bookmarkId", healthH.CheckBookmarkHealth)
+		api.GET("/bookmarks/fetch-favicon", bookmarkH.FetchFavicon)
+		api.GET("/memo", memoH.GetMemo)
+		api.PUT("/memo", memoH.UpdateMemo)
 
 		// Protected Admin Routes
 		admin := api.Group("")

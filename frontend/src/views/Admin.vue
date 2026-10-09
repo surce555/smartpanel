@@ -142,6 +142,35 @@ async function removeBookmark(id: string) {
   }
 }
 
+const fetchingAdminFavicon = ref(false)
+
+async function autoFetchAdminIcon() {
+  const targetUrl = bookmarkForm.value.url_internal || bookmarkForm.value.url_fallback || bookmarkForm.value.url_public_template
+  if (!targetUrl) {
+    alert('请先输入内网直连地址或中继域名')
+    return
+  }
+  fetchingAdminFavicon.value = true
+  try {
+    const res = await api.get(`/bookmarks/fetch-favicon?url=${encodeURIComponent(targetUrl)}`)
+    const data = res.data
+    if (data.title && !bookmarkForm.value.name) {
+      bookmarkForm.value.name = data.title
+    }
+    if (data.google_favicon) {
+      bookmarkForm.value.icon = data.google_favicon
+    } else if (data.icon_url) {
+      bookmarkForm.value.icon = data.icon_url
+    } else if (data.suggested_icon) {
+      bookmarkForm.value.icon = data.suggested_icon
+    }
+  } catch (e) {
+    alert('抓取失败，请手动输入图标')
+  } finally {
+    fetchingAdminFavicon.value = false
+  }
+}
+
 // Group actions
 function openCreateGroup() {
   groupForm.value = { id: '', name: '', icon: 'tabler:folder' }
@@ -459,17 +488,19 @@ function handleLogout() {
             <div
               v-for="t in bookmarksStore.tags"
               :key="t.id"
-              class="flex items-center justify-between p-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30"
+              class="flex items-center justify-between p-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 hover:border-slate-300 dark:hover:border-slate-700 transition-all"
             >
-              <div class="flex items-center gap-2">
-                <span class="w-3 h-3 rounded-full" :style="{ backgroundColor: t.color }"></span>
-                <span class="text-xs font-medium text-slate-800 dark:text-slate-200">{{ t.name }}</span>
+              <div class="flex items-center gap-2 truncate pr-2">
+                <span class="w-3 h-3 rounded-full shrink-0" :style="{ backgroundColor: t.color }"></span>
+                <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{{ t.name }}</span>
               </div>
               <button
+                type="button"
                 @click="removeTag(t.id)"
-                class="text-slate-400 hover:text-rose-600 p-1 rounded-md"
+                class="flex items-center gap-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 p-1.5 rounded-lg text-xs transition-colors cursor-pointer shrink-0"
+                title="删除此标签"
               >
-                ✕
+                <Icon icon="tabler:trash" class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -799,7 +830,19 @@ function handleLogout() {
           </div>
 
           <div>
-            <label class="block font-medium mb-1">图标 (Iconify 名称如 tabler:server，或图片 URL)</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-medium">图标 (Iconify 名称如 tabler:server，或图片 URL)</label>
+              <button
+                type="button"
+                @click="autoFetchAdminIcon"
+                :disabled="fetchingAdminFavicon"
+                class="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                title="根据输入的网址自动识别并抓取高清图标和标题"
+              >
+                <Icon :icon="fetchingAdminFavicon ? 'tabler:loader-2' : 'tabler:sparkles'" class="w-3.5 h-3.5" :class="{ 'animate-spin': fetchingAdminFavicon }" />
+                <span>{{ fetchingAdminFavicon ? '抓取中...' : '智能抓取' }}</span>
+              </button>
+            </div>
             <input v-model="bookmarkForm.icon" placeholder="tabler:link" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700" />
           </div>
 
