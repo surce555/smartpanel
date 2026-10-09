@@ -4,10 +4,11 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
-# Install dependencies using pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-COPY frontend/package.json ./
-RUN pnpm install
+# Install pnpm directly
+RUN npm install -g pnpm
+
+COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/.npmrc* ./
+RUN pnpm install --frozen-lockfile=false
 
 COPY frontend/ ./
 RUN pnpm run build
@@ -15,11 +16,13 @@ RUN pnpm run build
 # ==========================================
 # Stage 2: Backend Build (CGO-free Pure Go)
 # ==========================================
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:alpine AS backend-builder
 WORKDIR /build/backend
 
 # Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates
+
+ENV GOTOOLCHAIN=auto
 
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download

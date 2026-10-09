@@ -22,7 +22,6 @@ uploads/
 # Dependencies
 node_modules/
 .pnpm-store/
-.npmrc
 
 # IDE & Editor files
 .vscode/
