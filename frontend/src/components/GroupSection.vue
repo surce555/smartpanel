@@ -32,8 +32,31 @@ async function handleEmptyDrop(e: DragEvent) {
 
 <template>
   <section class="mb-8 last:mb-2">
-    <!-- Group Header -->
+    <!-- Group Header in Transparent Mode (Matching Image 4: e.g. APP +) -->
     <div
+      v-if="settingsStore.cardStyle === 'transparent'"
+      class="flex items-center gap-2 mb-3 px-1 select-none"
+    >
+      <h2
+        class="text-base sm:text-lg font-bold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] tracking-wide cursor-pointer flex items-center gap-2"
+        @click="isCollapsed = !isCollapsed"
+      >
+        <span>{{ group.name }}</span>
+      </h2>
+      <button
+        v-if="authStore.isAuthenticated"
+        type="button"
+        @click.stop="emit('add-bookmark', group.id)"
+        class="text-white/80 hover:text-white transition-colors p-0.5 cursor-pointer"
+        title="在此分组添加新卡片"
+      >
+        <Icon icon="tabler:plus" class="w-4 h-4 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]" />
+      </button>
+    </div>
+
+    <!-- Standard Mode Group Header -->
+    <div
+      v-else
       class="flex items-center justify-between mb-3 px-1 py-1 select-none group/hdr"
     >
       <div
@@ -41,33 +64,18 @@ async function handleEmptyDrop(e: DragEvent) {
         class="flex items-center gap-2.5 cursor-pointer"
       >
         <div
-          class="flex items-center justify-center w-7 h-7 rounded-lg group-hover/hdr:scale-105 transition-transform"
-          :class="[
-            settingsStore.cardStyle === 'transparent'
-              ? 'bg-black/35 backdrop-blur-md text-white border border-white/20'
-              : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
-          ]"
+          class="flex items-center justify-center w-7 h-7 rounded-lg group-hover/hdr:scale-105 transition-transform bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
         >
           <Icon v-if="group.icon" :icon="group.icon" class="w-4 h-4" />
           <Icon v-else icon="tabler:folder" class="w-4 h-4" />
         </div>
         <h2
-          class="text-base font-bold tracking-tight transition-colors"
-          :class="[
-            settingsStore.cardStyle === 'transparent'
-              ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]'
-              : 'text-slate-800 dark:text-slate-100 group-hover/hdr:text-indigo-600 dark:group-hover/hdr:text-indigo-400'
-          ]"
+          class="text-base font-bold tracking-tight text-slate-800 dark:text-slate-100 group-hover/hdr:text-indigo-600 dark:group-hover/hdr:text-indigo-400 transition-colors"
         >
           {{ group.name }}
         </h2>
         <span
-          class="text-xs px-2 py-0.5 rounded-full font-medium"
-          :class="[
-            settingsStore.cardStyle === 'transparent'
-              ? 'bg-black/35 backdrop-blur-md text-white/90 border border-white/10'
-              : 'bg-slate-200/60 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400'
-          ]"
+          class="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-200/60 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400"
         >
           {{ group.bookmarks?.length || 0 }}
         </span>
@@ -80,12 +88,7 @@ async function handleEmptyDrop(e: DragEvent) {
           v-if="authStore.isAuthenticated"
           type="button"
           @click.stop="emit('add-bookmark', group.id)"
-          class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all opacity-85 hover:opacity-100"
-          :class="[
-            settingsStore.cardStyle === 'transparent'
-              ? 'text-white bg-black/35 hover:bg-black/55 backdrop-blur-md border border-white/20'
-              : 'text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          ]"
+          class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all opacity-85 hover:opacity-100"
           title="在此分组添加新卡片"
         >
           <Icon icon="tabler:plus" class="w-3.5 h-3.5" />

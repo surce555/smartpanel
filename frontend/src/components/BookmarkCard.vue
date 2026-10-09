@@ -167,7 +167,53 @@ function handleClick(e: MouseEvent) {
 </script>
 
 <template>
+  <!-- Transparent Pure Text Mode (Strictly matching Image 4) -->
   <a
+    v-if="settingsStore.cardStyle === 'transparent'"
+    :href="resolvedUrl"
+    :target="bookmark.open_in_new_tab ? '_blank' : '_self'"
+    rel="noopener noreferrer"
+    draggable="true"
+    @dragstart="handleDragStart"
+    @dragend="handleDragEnd"
+    @dragover.prevent="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop.prevent="handleDrop"
+    @click="handleClick"
+    class="group relative inline-flex items-center justify-start py-1 px-1 transition-transform duration-200 cursor-pointer select-none hover:scale-105 active:scale-95"
+  >
+    <!-- Hover Action Handle (Drag grip + Quick edit) for Admin -->
+    <div
+      v-if="authStore.isAuthenticated"
+      class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
+    >
+      <button
+        type="button"
+        @click.prevent.stop="emit('edit', bookmark)"
+        class="p-1 rounded-md bg-black/60 hover:bg-black/90 text-white/90 hover:text-white shadow-xs"
+        title="编辑此书签"
+      >
+        <Icon icon="tabler:pencil" class="w-3 h-3" />
+      </button>
+      <span
+        class="p-1 rounded-md bg-black/60 text-white/70 cursor-grab active:cursor-grabbing hover:text-white shadow-xs"
+        title="长按拖拽以调整位置"
+      >
+        <Icon icon="tabler:grip-vertical" class="w-3 h-3" />
+      </span>
+    </div>
+
+    <!-- Bookmark Name (Pure white text with text shadow) -->
+    <span
+      class="text-white font-medium sm:font-semibold text-sm sm:text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] group-hover:drop-shadow-[0_2px_10px_rgba(255,255,255,0.85)] truncate"
+    >
+      {{ bookmark.name }}
+    </span>
+  </a>
+
+  <!-- Standard Card Mode (Glass, Solid, Minimal) -->
+  <a
+    v-else
     :href="resolvedUrl"
     :target="bookmark.open_in_new_tab ? '_blank' : '_self'"
     rel="noopener noreferrer"

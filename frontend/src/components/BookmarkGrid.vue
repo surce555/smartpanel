@@ -51,8 +51,12 @@ async function handleGridDrop(e: DragEvent) {
   <div
     @dragover.prevent
     @drop.prevent="handleGridDrop"
-    class="grid gap-3.5 sm:gap-4 transition-all duration-300 min-h-[40px] p-1 rounded-2xl"
-    :class="gridClass"
+    class="grid transition-all duration-300 min-h-[40px] p-1"
+    :class="[
+      settingsStore.cardStyle === 'transparent'
+        ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-6 sm:gap-x-10 gap-y-3 sm:gap-y-4 mb-6'
+        : `gap-3.5 sm:gap-4 rounded-2xl ${gridClass}`
+    ]"
   >
     <BookmarkCard
       v-for="b in bookmarks"

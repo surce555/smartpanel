@@ -5,7 +5,6 @@ import { Icon } from '@iconify/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
-import LoginWallpaperModal from '@/components/LoginWallpaperModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -24,10 +23,6 @@ const newPassword = ref<string>('')
 const confirmPassword = ref<string>('')
 const changeMsg = ref<string>('')
 
-// Login Wallpaper Modal state
-const showWallpaperModal = ref<boolean>(false)
-const localWallpaperOverride = ref<string>('')
-
 // Theme state
 const isDarkMode = ref<boolean>(document.documentElement.classList.contains('dark'))
 
@@ -38,40 +33,29 @@ function toggleTheme() {
 }
 
 const activeWallpaperUrl = computed(() => {
-  if (localWallpaperOverride.value) return localWallpaperOverride.value
-
-  const cachedLocal = localStorage.getItem('smartpanel_login_wallpaper_local')
-  if (cachedLocal) return cachedLocal
-
-  const cachedUrl = localStorage.getItem('smartpanel_login_wallpaper_url')
-  if (cachedUrl) return cachedUrl
-
   if (settingsStore.loginWallpaperType === 'follow') {
-    return settingsStore.wallpaperUrl || '/wallpapers/home_cafe_girl.png'
+    return settingsStore.wallpaperUrl || ''
   }
-  return settingsStore.loginWallpaperUrl || '/wallpapers/login_anime_girl.png'
+  return settingsStore.loginWallpaperUrl || settingsStore.wallpaperUrl || ''
 })
 
 const wallpaperStyle = computed(() => {
+  const url = activeWallpaperUrl.value
   const blur = settingsStore.loginWallpaperBlur || 0
   return {
-    backgroundImage: `url(${activeWallpaperUrl.value})`,
+    backgroundImage: url ? `url(${url})` : 'none',
     filter: blur > 0 ? `blur(${blur}px)` : 'none',
     transform: blur > 0 ? 'scale(1.05)' : 'none',
   }
 })
 
 const maskStyle = computed(() => {
-  const mask = settingsStore.loginWallpaperMask ?? 15
+  const mask = settingsStore.loginWallpaperMask ?? 0
   const opacity = mask / 100
   return {
-    backgroundColor: `rgba(0, 0, 0, ${opacity})`,
+    backgroundColor: opacity > 0 ? `rgba(0, 0, 0, ${opacity})` : 'transparent',
   }
 })
-
-function onWallpaperChanged(url: string) {
-  localWallpaperOverride.value = url
-}
 
 async function handleLogin() {
   errorMsg.value = ''
@@ -93,20 +77,17 @@ async function handleChangePassword() {
   changeMsg.value = ''
   if (newPassword.value.length < 6) {
     changeMsg.value = '新密码长度至少需 6 位'
-    return
-  }
-  if (newPassword.value !== confirmPassword.value) {
+  } else if (newPassword.value !== confirmPassword.value) {
     changeMsg.value = '两次输入的新密码不一致'
-    return
-  }
-
-  const res = await authStore.changePassword(oldPassword.value, newPassword.value)
-  if (res.success) {
-    showChangeModal.value = false
-    const redirect = (route.query.redirect as string) || '/admin'
-    router.push(redirect)
   } else {
-    changeMsg.value = res.error || '修改密码失败'
+    const res = await authStore.changePassword(oldPassword.value, newPassword.value)
+    if (res.success) {
+      showChangeModal.value = false
+      const redirect = (route.query.redirect as string) || '/admin'
+      router.push(redirect)
+    } else {
+      changeMsg.value = res.error || '修改密码失败'
+    }
   }
 }
 
@@ -116,9 +97,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="relative min-h-[100dvh] flex items-center justify-center p-4 overflow-hidden select-none">
+  <div class="relative min-h-[100dvh] flex items-center justify-center p-4 overflow-hidden select-none bg-slate-950">
     <!-- Dynamic Fullscreen Wallpaper Background Layer -->
     <div
+      v-if="activeWallpaperUrl"
       class="fixed inset-0 -z-20 bg-cover bg-center transition-all duration-700 pointer-events-none"
       :style="wallpaperStyle"
     ></div>
@@ -129,63 +111,64 @@ onMounted(async () => {
       :style="maskStyle"
     ></div>
 
-    <!-- Top Floating Controls: Quick Wallpaper Switcher -->
-    <div class="fixed top-4 right-4 z-20 flex items-center gap-2">
-      <button
-        type="button"
-        @click="showWallpaperModal = true"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white backdrop-blur-md border border-white/20 text-xs font-medium shadow-lg hover:scale-105 transition-all cursor-pointer"
-        title="更换登录页壁纸"
-      >
-        <Icon icon="tabler:photo" class="w-3.5 h-3.5" />
-        <span>更换壁纸</span>
-      </button>
-    </div>
-
-    <!-- Crystal Transparent Login Card (Matching Image 1) -->
-    <div
-      class="w-full max-w-sm sm:max-w-md p-7 sm:p-8 rounded-3xl border border-white/30 bg-black/20 dark:bg-black/35 backdrop-blur-md shadow-2xl space-y-6 transition-all animate-in fade-in zoom-in-95 duration-200"
+    <!-- Top Left Discreet Return to Home Link -->
+    <router-link
+      to="/"
+      class="fixed top-4 sm:top-5 left-4 sm:left-5 z-20 p-2 sm:px-3 sm:py-1.5 rounded-xl bg-black/30 hover:bg-black/55 text-white/70 hover:text-white border border-white/15 transition-all text-xs flex items-center gap-1.5"
+      title="返回首页"
     >
-      <!-- Card Top Bar: Theme Switcher + Language Selector (as shown in Image 1) -->
-      <div class="flex items-center justify-between pt-1">
+      <Icon icon="tabler:arrow-left" class="w-4 h-4" />
+      <span class="hidden sm:inline">首页</span>
+    </router-link>
+
+    <!-- Crystal 100% Pure Transparent Login Card (Matching Image 1) -->
+    <div
+      class="w-full max-w-[380px] sm:max-w-[400px] p-7 sm:p-8 rounded-[28px] border border-white/40 shadow-2xl space-y-6 transition-all animate-in fade-in zoom-in-95 duration-200"
+      style="background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;"
+    >
+      <!-- Card Top Bar: Theme Switcher Pill (Left) + Language Selector (Right) -->
+      <div class="flex items-center justify-between pt-0.5">
         <!-- Theme Toggle Switch Pill -->
         <button
           type="button"
           @click="toggleTheme"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs cursor-pointer transition-all"
-          :title="isDarkMode ? '切换为浅色模式' : '切换为深色模式'"
+          class="w-12 h-6 rounded-full bg-black/35 border border-white/20 p-0.5 flex items-center transition-all cursor-pointer"
+          :class="isDarkMode ? 'justify-end' : 'justify-start'"
+          :title="isDarkMode ? '切换为浅色' : '切换为深色'"
         >
-          <Icon :icon="isDarkMode ? 'tabler:moon' : 'tabler:sun'" class="w-4 h-4 text-white" />
+          <span class="w-5 h-5 rounded-full bg-white/90 shadow flex items-center justify-center text-slate-800">
+            <Icon :icon="isDarkMode ? 'tabler:moon' : 'tabler:sun'" class="w-3.5 h-3.5" />
+          </span>
         </button>
 
         <!-- Language Pill -->
-        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/10 border border-white/25 text-white/90 text-xs font-normal">
-          <Icon icon="tabler:language" class="w-3.5 h-3.5" />
-          <span>简体中文</span>
-          <Icon icon="tabler:chevron-down" class="w-3 h-3 opacity-70" />
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/25 border border-white/25 text-white/90 text-xs font-normal">
+          <Icon icon="tabler:language" class="w-3.5 h-3.5 opacity-80" />
+          <span class="opacity-90">简体中文</span>
+          <Icon icon="tabler:chevron-down" class="w-3.5 h-3.5 opacity-60 ml-0.5" />
         </div>
       </div>
 
       <!-- Login Form -->
-      <form @submit.prevent="handleLogin" class="space-y-4">
+      <form @submit.prevent="handleLogin" class="space-y-4 pt-1">
         <!-- Account Input with User Icon (Matching Image 1) -->
         <div class="relative">
-          <div class="flex items-center w-full px-3.5 py-2.5 rounded-xl bg-white/10 dark:bg-black/25 border border-white/20 focus-within:border-white/50 focus-within:bg-white/15 transition-all">
+          <div class="flex items-center w-full px-3.5 py-2.5 rounded-lg bg-black/25 border border-white/25 focus-within:border-white/60 focus-within:bg-black/35 transition-all">
             <Icon icon="tabler:user" class="w-4 h-4 text-white/70 mr-2.5 shrink-0" />
             <input
               type="text"
               v-model="email"
-              placeholder="sunas (管理员账号)"
+              placeholder="sunas"
               required
               autocomplete="username"
-              class="w-full bg-transparent text-white placeholder-white/45 text-base sm:text-sm focus:outline-none"
+              class="w-full bg-transparent text-white placeholder-white/40 text-sm focus:outline-none"
             />
           </div>
         </div>
 
         <!-- Password Input with Lock Icon (Matching Image 1) -->
         <div class="relative">
-          <div class="flex items-center w-full px-3.5 py-2.5 rounded-xl bg-white/10 dark:bg-black/25 border border-white/20 focus-within:border-white/50 focus-within:bg-white/15 transition-all">
+          <div class="flex items-center w-full px-3.5 py-2.5 rounded-lg bg-black/25 border border-white/25 focus-within:border-white/60 focus-within:bg-black/35 transition-all">
             <Icon icon="tabler:lock" class="w-4 h-4 text-white/70 mr-2.5 shrink-0" />
             <input
               type="password"
@@ -193,43 +176,25 @@ onMounted(async () => {
               placeholder="••••••••••••"
               required
               autocomplete="current-password"
-              class="w-full bg-transparent text-white placeholder-white/45 text-base sm:text-sm tracking-widest focus:outline-none"
+              class="w-full bg-transparent text-white placeholder-white/40 text-sm tracking-widest focus:outline-none"
             />
           </div>
         </div>
 
-        <div v-if="errorMsg" class="p-2.5 rounded-xl bg-rose-500/20 border border-rose-400/40 text-xs text-rose-200">
+        <div v-if="errorMsg" class="p-2.5 rounded-lg bg-rose-500/30 border border-rose-400/40 text-xs text-rose-100">
           {{ errorMsg }}
         </div>
 
-        <!-- Submit Button (Matching Image 1: Thin border, translucent background, white text) -->
+        <!-- Submit Button (Matching Image 1: Thin border, translucent bg, white text) -->
         <button
           type="submit"
           :disabled="authStore.loading"
-          class="w-full py-2.5 mt-2 rounded-xl border border-white/40 hover:border-white/70 bg-white/10 hover:bg-white/25 active:scale-[0.99] text-white font-medium text-sm tracking-widest transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm"
+          class="w-full py-2.5 mt-2 rounded-lg border border-white/35 hover:border-white/60 bg-black/25 hover:bg-black/40 active:scale-[0.99] text-white font-medium text-sm tracking-widest transition-all duration-200 flex items-center justify-center cursor-pointer shadow-sm"
         >
-          <span>{{ authStore.loading ? '正在验证...' : '登 录' }}</span>
+          <span>{{ authStore.loading ? '正在验证...' : '登录' }}</span>
         </button>
       </form>
-
-      <!-- Footer navigation -->
-      <div class="pt-3 border-t border-white/10 text-center">
-        <router-link
-          to="/"
-          class="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white transition-colors"
-        >
-          <Icon icon="tabler:arrow-left" class="w-3.5 h-3.5" />
-          <span>返回导航首页</span>
-        </router-link>
-      </div>
     </div>
-
-    <!-- Wallpaper Modal -->
-    <LoginWallpaperModal
-      :show="showWallpaperModal"
-      @close="showWallpaperModal = false"
-      @changed="onWallpaperChanged"
-    />
 
     <!-- Forced Password Reset Modal -->
     <div

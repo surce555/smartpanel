@@ -349,7 +349,7 @@ func updateCloudflareDNSRecord(newIPv6 string) error {
 		if len(cfResp.Errors) > 0 {
 			errMsg = cfResp.Errors[0].Message
 		}
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	return nil

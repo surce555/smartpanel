@@ -31,16 +31,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const gridColsTablet = ref<number>(3)
   const gridColsMobile = ref<number>(2)
 
-  const wallpaperType = ref<string>('gradient')
+  const wallpaperType = ref<string>('upload')
   const wallpaperBlur = ref<number>(0)
-  const wallpaperMask = ref<number>(20)
+  const wallpaperMask = ref<number>(0)
   const wallpaperInterval = ref<number>(60)
   const wallpaperUrl = ref<string>('')
 
   const loginWallpaperType = ref<string>('follow')
-  const loginWallpaperUrl = ref<string>('/wallpapers/login_anime_girl.png')
+  const loginWallpaperUrl = ref<string>('')
   const loginWallpaperBlur = ref<number>(0)
-  const loginWallpaperMask = ref<number>(15)
+  const loginWallpaperMask = ref<number>(0)
 
   const fontFamily = ref<string>('')
   const fontSize = ref<string>('16px')
@@ -173,36 +173,29 @@ export const useSettingsStore = defineStore('settings', () => {
       await saveSettings({
         card_style: 'transparent',
         card_shadow: 'none',
-        wallpaper_type: 'upload',
-        wallpaper_url: '/wallpapers/home_cafe_girl.png',
         wallpaper_blur: '0',
-        wallpaper_mask: '10',
-        login_wallpaper_type: 'upload',
-        login_wallpaper_url: '/wallpapers/login_anime_girl.png',
+        wallpaper_mask: '0',
         login_wallpaper_blur: '0',
-        login_wallpaper_mask: '15',
+        login_wallpaper_mask: '0',
       })
     } else if (preset === 'glass') {
       await saveSettings({
         card_style: 'glass',
         card_shadow: 'md',
-        wallpaper_type: 'gradient',
         wallpaper_blur: '0',
-        wallpaper_mask: '20',
+        wallpaper_mask: '15',
         login_wallpaper_type: 'follow',
       })
     } else if (preset === 'solid') {
       await saveSettings({
         card_style: 'solid',
         card_shadow: 'sm',
-        wallpaper_type: 'none',
         login_wallpaper_type: 'follow',
       })
     } else if (preset === 'minimal') {
       await saveSettings({
         card_style: 'minimal',
         card_shadow: 'none',
-        wallpaper_type: 'gradient',
         login_wallpaper_type: 'follow',
       })
     }

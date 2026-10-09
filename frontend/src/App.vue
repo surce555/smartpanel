@@ -15,16 +15,13 @@ const authStore = useAuthStore()
 const isLoginRoute = computed(() => route.name === 'Login')
 
 const currentHomeWallpaperUrl = computed(() => {
-  if (settingsStore.wallpaperType === 'upload' && settingsStore.wallpaperUrl) {
+  if (settingsStore.wallpaperUrl) {
     return settingsStore.wallpaperUrl
-  }
-  if (settingsStore.cardStyle === 'transparent') {
-    return settingsStore.wallpaperUrl || '/wallpapers/home_cafe_girl.png'
   }
   if (settingsStore.wallpaperType === 'unsplash') {
     return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80'
   }
-  return settingsStore.wallpaperUrl || ''
+  return ''
 })
 
 const wallpaperStyle = computed(() => {
