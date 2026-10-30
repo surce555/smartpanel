@@ -21,6 +21,10 @@ export interface NetworkInfo {
   client_ip?: string
   host_lan_ips?: string[]
   server_port?: string
+  /** Request reached the app through the Cloudflare edge (Tunnel / proxied DNS) */
+  via_cloudflare?: boolean
+  /** Page was served over a direct (non-proxied) IPv6 connection */
+  direct_ipv6?: boolean
 }
 
 export const useSettingsStore = defineStore('settings', () => {

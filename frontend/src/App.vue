@@ -54,11 +54,21 @@ onMounted(async () => {
   await settingsStore.fetchSettings()
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
-  // Probe IPv6 & LAN in background. Routing is fail-safe: until the IPv6 probe
-  // confirms availability, links use the domain the user is already browsing,
-  // so a slow probe can never strand the user on an unreachable IPv6 address.
-  probeIPv6()
-  probeLanConnectivity(settingsStore.networkInfo.host_lan_ips, settingsStore.networkInfo.server_port)
+
+  // IPv6 routing decision. Ordering: LAN > IPv6 > CF domain.
+  //
+  // The backend reports `direct_ipv6` when this very page was served over a
+  // direct IPv6 connection — that is positive proof the client has IPv6 and
+  // outranks any external probe, which is often blocked on mainland networks
+  // and used to downgrade working IPv6 clients to the CF domain.
+  const net = settingsStore.networkInfo
+  probeIPv6(undefined, undefined, {
+    clientIP: net.client_ip,
+    directIPv6: net.direct_ipv6,
+    viaCloudflare: net.via_cloudflare,
+    v6domain: net.v6domain,
+  })
+  probeLanConnectivity(net.host_lan_ips, net.server_port)
   // Check auth
   authStore.fetchMe()
 })

@@ -96,6 +96,13 @@ type NetworkInfo struct {
 	ClientIP         string   `json:"client_ip,omitempty"`
 	HostLANIPs       []string `json:"host_lan_ips,omitempty"`
 	ServerPort       string   `json:"server_port,omitempty"`
+	// ViaCloudflare is true when this request came through the Cloudflare edge
+	// (Tunnel / proxied DNS). Behind the edge, ClientIP is the visitor's public
+	// address and no longer proves which protocol reached the NAS.
+	ViaCloudflare bool `json:"via_cloudflare"`
+	// DirectIPv6 is true only when the page was loaded over a direct (non-proxied)
+	// IPv6 connection, i.e. the browser provably reached the NAS over IPv6.
+	DirectIPv6 bool `json:"direct_ipv6"`
 }
 
 type NetworkSettingsUpdateRequest struct {

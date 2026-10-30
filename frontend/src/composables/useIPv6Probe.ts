@@ -3,6 +3,12 @@ import { ref } from 'vue'
 const isIPv6Available = ref<boolean | null>(null)
 const isLanAvailable = ref<boolean | null>(null)
 const isProbing = ref<boolean>(false)
+/**
+ * True when the page itself arrived through the Cloudflare edge. In that case
+ * `client_ip` is the visitor's public address and says nothing about which
+ * protocol reached the NAS, so it cannot be used as IPv6 proof.
+ */
+const isProxiedClient = ref<boolean>(false)
 const routePreference = ref<'auto' | 'lan' | 'ipv6' | 'domain'>(
   (localStorage.getItem('smartpanel_route_preference') as any) || 'auto'
 )
@@ -22,6 +28,19 @@ export function isLanHost(hostname: string): boolean {
 export function isIPv6Host(hostname: string): boolean {
   if (!hostname) return false
   return hostname.includes(':') || hostname.startsWith('[') || /^([0-9a-fA-F]{1,4}:){2,}/.test(hostname)
+}
+
+/**
+ * Whether a plain IP string is IPv6 (used for the client IP the backend reports).
+ * `client_ip` arrives as `2408:8207:...` or `::ffff:1.2.3.4` style values.
+ */
+export function isIPv6Address(ip?: string): boolean {
+  if (!ip) return false
+  const v = ip.trim().replace(/^\[|\]$/g, '')
+  if (!v.includes(':')) return false
+  // IPv4-mapped IPv6 (::ffff:192.168.1.1) is really an IPv4 connection.
+  if (/^::ffff:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/i.test(v)) return false
+  return /^[0-9a-fA-F:]+$/.test(v)
 }
 
 /**
@@ -84,21 +103,24 @@ export function useIPv6Probe() {
   }
 
   /**
-   * Probe IPv6 connectivity using endpoints that only resolve over IPv6.
+   * Probe IPv6 connectivity.
    *
-   * Uses `fetch(..., { mode: 'no-cors' })` instead of an <img> probe. The old
-   * implementation resolved `true` from `img.onerror`, on the assumption that
-   * "an error on an IPv6-only host means DNS/TCP succeeded". That assumption is
-   * wrong: on a network without IPv6 the AAAA lookup fails and the request
-   * errors out *immediately*, which also fires `onerror` — so every IPv4-only
-   * client was reported as "IPv6 available" and every card link was routed to
-   * an unreachable IPv6 address.
+   * Evidence is ranked; earlier sources are strictly more reliable than later:
    *
-   * `fetch` gives a real discriminator: it RESOLVES once the response headers
-   * arrive (an opaque response for no-cors counts), and only REJECTS when the
-   * network layer itself failed. So:
-   *   resolve -> IPv6 really works
-   *   reject  -> IPv6 is unusable (or too slow to be worth using)
+   *   1. Page opened via a bare IPv6 host    -> IPv6 proven, no probe needed.
+   *   2. Backend saw the client connect over IPv6 (`client_ip` is v6)
+   *      -> IPv6 proven. The request that delivered this very page arrived over
+   *         IPv6, so the client demonstrably has working IPv6 connectivity.
+   *   3. Active probe against IPv6-only public endpoints.
+   *
+   * Step 2 is what fixes the "IPv6 client routed to the CF domain" regression:
+   * the external probe can fail for reasons unrelated to the client (endpoint
+   * blocked by a firewall / proxy / slow region), which used to be treated as
+   * "client has no IPv6" and downgraded everyone to the domain fallback.
+   *
+   * The probe distinguishes real reachability from mere failure: `fetch` only
+   * rejects when the network layer failed; a no-cors opaque response resolving
+   * means DNS + TCP + TLS all worked.
    */
   async function probeSingleIPv6Endpoint(url: string, timeout: number): Promise<boolean> {
     const controller = new AbortController()
@@ -120,32 +142,81 @@ export function useIPv6Probe() {
     }
   }
 
-  async function probeIPv6(customProbeUrl?: string, timeoutMs: number = 1500): Promise<boolean> {
-    // 1. Already browsing over IPv6: no probe needed.
+  /**
+   * @param opts.clientIP       backend-reported client IP for this request
+   * @param opts.directIPv6     backend proved the page arrived over a direct
+   *                            (non-Cloudflare) IPv6 connection
+   * @param opts.v6domain       the user's own IPv6-only host (e.g. v6.example.com)
+   * @param opts.probeSelfUrl   same-origin URL to probe when nothing better exists
+   * @param opts.force          ignore the cache and re-probe (network change)
+   *
+   * Evidence is ranked, strongest first. Only the active external probe can
+   * return "unavailable" — every other source is positive proof.
+   *
+   *   1. `direct_ipv6` from the backend: this very page was served over a direct
+   *      IPv6 connection, so the client demonstrably has IPv6.
+   *   2. Page opened via a bare IPv6 host.
+   *   3. Probe the user's own v6domain — the exact host the cards link to, so a
+   *      success here is the most relevant possible signal.
+   *   4. Probe public IPv6-only endpoints. These are frequently blocked or slow
+   *      on mainland networks, so a failure here is the *weakest* evidence.
+   */
+  async function probeIPv6(
+    customProbeUrl?: string,
+    timeoutMs: number = 1500,
+    opts: {
+      clientIP?: string
+      directIPv6?: boolean
+      viaCloudflare?: boolean
+      v6domain?: string
+      probeSelfUrl?: string
+      force?: boolean
+    } = {}
+  ): Promise<boolean> {
+    isProxiedClient.value = Boolean(opts.viaCloudflare)
+
+    // 1. Backend proved this page arrived over direct IPv6.
+    if (opts.directIPv6) {
+      isIPv6Available.value = true
+      writeIPv6Cache(true)
+      return true
+    }
+
+    // 2. Page opened through a bare IPv6 host: IPv6 is proven.
     if (isIPv6Host(window.location.hostname)) {
       isIPv6Available.value = true
       writeIPv6Cache(true)
       return true
     }
 
-    // 2. Reuse a recent result. Cached with a timestamp: the old code stored a
-    //    bare flag for the whole session, so moving between networks (Wi-Fi to
-    //    cellular) kept the stale answer until the tab was closed.
-    const cached = readIPv6Cache()
-    if (cached !== null) {
-      isIPv6Available.value = cached
-      return cached
+    // 3. Direct (non-proxied) connection whose peer address is IPv6.
+    //    `directIPv6` already covers this, but some deployments hide RemoteAddr;
+    //    treat a non-proxied IPv6 client_ip as equivalent proof.
+    if (!opts.v6domain && !opts.probeSelfUrl && isIPv6Address(opts.clientIP) && !isProxiedClient.value) {
+      isIPv6Available.value = true
+      writeIPv6Cache(true)
+      return true
+    }
+
+    // 4. Reuse a recent probe result (5 min TTL, reset on network change).
+    if (!opts.force) {
+      const cached = readIPv6Cache()
+      if (cached !== null) {
+        isIPv6Available.value = cached
+        return cached
+      }
     }
 
     isProbing.value = true
 
-    // Only IPv6-reachable hosts: they either have no A record at all, or resolve
-    // to something unusable over IPv4, so a successful fetch implies IPv6.
-    const endpoints = [
-      customProbeUrl,
-      'https://6.ipw.cn',
-      'https://speed.neu6.edu.cn',
-    ].filter(Boolean) as string[]
+    // Ordered by usefulness: the user's own v6 host first, then generic probes.
+    const endpoints: string[] = []
+    if (opts.v6domain) {
+      endpoints.push(`https://${opts.v6domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`)
+    }
+    if (customProbeUrl) endpoints.push(customProbeUrl)
+    if (opts.probeSelfUrl) endpoints.push(opts.probeSelfUrl)
+    endpoints.push('https://6.ipw.cn', 'https://speed.neu6.edu.cn')
 
     try {
       // Race them in parallel: one success is enough, and this is faster than
@@ -219,6 +290,7 @@ export function useIPv6Probe() {
     isIPv6Available,
     isLanAvailable,
     isProbing,
+    isProxiedClient,
     routePreference,
     setRoutePreference,
     probeIPv6,

@@ -5,7 +5,6 @@ import { Icon } from '@iconify/vue'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
-import { useIPv6Probe } from '@/composables/useIPv6Probe'
 import { Bookmark } from '@/stores/bookmarks'
 import SearchBar from '@/components/SearchBar.vue'
 import GroupSection from '@/components/GroupSection.vue'
@@ -25,7 +24,6 @@ const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const theme = useTheme()
-const { probeIPv6 } = useIPv6Probe()
 
 // Modals state
 const showBookmarkModal = ref<boolean>(false)
@@ -173,7 +171,9 @@ onMounted(async () => {
     router.replace({ name: 'Login', query: { redirect: '/' } })
     return
   }
-  probeIPv6()
+  // IPv6 probing is centralised in App.vue, which passes the backend-reported
+  // client IP. Re-probing here without that hint could race the good result and
+  // downgrade an IPv6 client to the domain fallback.
   window.addEventListener('click', handleOutsideClick)
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('mousemove', resetIdleTimer)

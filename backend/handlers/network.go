@@ -113,6 +113,24 @@ func getHostLANIPs() []string {
 	return ips
 }
 
+// isProxiedByCloudflare reports whether this request reached us through the
+// Cloudflare edge (Tunnel / proxied DNS) rather than a direct connection.
+//
+// This matters for routing: behind Cloudflare, `CF-Connecting-IP` carries the
+// visitor's public address, so an IPv6 value there does NOT prove the client
+// reached the NAS directly over IPv6 — Cloudflare could have proxied an IPv4
+// client, or an IPv6 client over the tunnel. Only a direct connection proves
+// the client can reach the NAS over IPv6.
+func isProxiedByCloudflare(c *gin.Context) bool {
+	if c.GetHeader("CF-Ray") != "" || c.GetHeader("CF-Connecting-IP") != "" {
+		return true
+	}
+	if c.GetHeader("CDN-Loop") != "" {
+		return true
+	}
+	return false
+}
+
 func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 	rawClientIP := c.ClientIP()
 	clientIP := net.ParseIP(rawClientIP)
@@ -167,6 +185,18 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 
 	isLAN, clientIPStr, hostIPs, srvPort := evaluateLANEnvironment(c)
 
+	// Whether this page was loaded over a direct (non-proxied) connection, and
+	// whether that direct connection was IPv6. The frontend uses this as proof
+	// that the client really has working IPv6 reachability to the NAS.
+	viaCloudflare := isProxiedByCloudflare(c)
+	remoteHost, _, splitErr := net.SplitHostPort(c.Request.RemoteAddr)
+	directIPv6 := false
+	if splitErr == nil && !viaCloudflare {
+		if rip := net.ParseIP(remoteHost); rip != nil && rip.To4() == nil {
+			directIPv6 = true
+		}
+	}
+
 	info := models.NetworkInfo{
 		CurrentIPv6:      database.GetSetting("current_ipv6"),
 		DetectedHostIPv6: services.GetCapturedServerIPv6(),
@@ -184,6 +214,8 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 		ClientIP:         clientIPStr,
 		HostLANIPs:       hostIPs,
 		ServerPort:       srvPort,
+		ViaCloudflare:    viaCloudflare,
+		DirectIPv6:       directIPv6,
 	}
 
 	c.JSON(http.StatusOK, info)
@@ -221,6 +253,15 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 	}
 	isLAN, clientIPStr, hostIPs, srvPort := evaluateLANEnvironment(c)
 
+	viaCloudflare := isProxiedByCloudflare(c)
+	remoteHostSSE, _, sseSplitErr := net.SplitHostPort(c.Request.RemoteAddr)
+	directIPv6 := false
+	if sseSplitErr == nil && !viaCloudflare {
+		if rip := net.ParseIP(remoteHostSSE); rip != nil && rip.To4() == nil {
+			directIPv6 = true
+		}
+	}
+
 	initialInfo := models.NetworkInfo{
 		CurrentIPv6:      database.GetSetting("current_ipv6"),
 		DetectedHostIPv6: services.GetCapturedServerIPv6(),
@@ -238,6 +279,8 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 		ClientIP:         clientIPStr,
 		HostLANIPs:       hostIPs,
 		ServerPort:       srvPort,
+		ViaCloudflare:    viaCloudflare,
+		DirectIPv6:       directIPv6,
 	}
 	dataBytes, _ := json.Marshal(initialInfo)
 	_, _ = fmt.Fprintf(c.Writer, "event: network_update\ndata: %s\n\n", string(dataBytes))
@@ -254,6 +297,11 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 			info.HostLANIPs = hostIPs
 			info.ServerPort = srvPort
 			info.LANDomain = database.GetSetting("lan_domain")
+			// Keep the per-connection facts on every push. The broadcast payload
+			// originates from the DDNS service and does not know them; without
+			// this the frontend would see them reset to false mid-session.
+			info.ViaCloudflare = viaCloudflare
+			info.DirectIPv6 = directIPv6
 			bytes, err := json.Marshal(info)
 			if err != nil {
 				return true
