@@ -1,11 +1,20 @@
-# pnpm 10+ moved dependency build-script approval out of package.json into this
-# workspace file. Both keys are kept so the repository builds with the pnpm 9
-# used by the Dockerfile AND with newer local pnpm releases:
-#   - onlyBuiltDependencies: pnpm 9/10 format
-#   - allowBuilds:           pnpm 11+ format
+# pnpm workspace / build-script allow-list
 #
-# Without this, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS and the Docker
-# build fails before Vite ever runs.
+# This file exists for two reasons:
+#
+# 1. Build-script approval. pnpm 10+ refuses to install when a dependency has an
+#    unapproved postinstall script and exits with ERR_PNPM_IGNORED_BUILDS.
+#    Both spellings are declared so the Docker build (pnpm 9) and local builds
+#    (pnpm 11/12) accept the same lockfile:
+#      - onlyBuiltDependencies / allowBuilds
+#    esbuild and vue-demi are the only packages this project needs to build.
+#
+# 2. pnpm 9 treats the mere presence of this file as "this is a workspace root"
+#    and then hard-fails with `packages field missing or empty`. Declaring the
+#    single package directory keeps pnpm 9 happy; pnpm 10+ ignore it.
+packages:
+  - '.'
+
 onlyBuiltDependencies:
   - esbuild
   - vue-demi
