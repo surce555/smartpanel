@@ -2,6 +2,7 @@ name: Build and Publish Docker Image
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -33,6 +34,7 @@ jobs:
           images: ghcr.io/surce555/smartpanel
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
             type=ref,event=tag
             type=sha
 
@@ -45,7 +47,6 @@ jobs:
           tags: |
             ghcr.io/surce555/smartpanel:latest
             ghcr.io/surce555/smartpanel:${{ github.sha }}
-            ${{ github.ref_type == 'tag' && format('ghcr.io/surce555/smartpanel:{0}', github.ref_name) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

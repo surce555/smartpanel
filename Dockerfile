@@ -4,11 +4,15 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
-# Install pnpm directly
+# Pin pnpm 9: pnpm 10+ aborts the install with ERR_PNPM_IGNORED_BUILDS unless
+# dependency build scripts are explicitly approved.
 RUN npm install -g pnpm@9
 
-COPY frontend/package.json frontend/pnpm-lock.yaml* ./
-RUN pnpm install
+# Copy lockfile + workspace config first for better layer caching. The
+# pnpm-workspace.yaml carries the build-script allow-list (esbuild, vue-demi)
+# for pnpm 10+; without it the install step fails.
+COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/.npmrc* frontend/pnpm-workspace.yaml* ./
+RUN pnpm install --prefer-offline
 
 COPY frontend/ ./
 RUN pnpm run build
