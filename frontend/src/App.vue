@@ -54,7 +54,9 @@ onMounted(async () => {
   await settingsStore.fetchSettings()
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
-  // Probe IPv6 & LAN in background
+  // Probe IPv6 & LAN in background. Routing is fail-safe: until the IPv6 probe
+  // confirms availability, links use the domain the user is already browsing,
+  // so a slow probe can never strand the user on an unreachable IPv6 address.
   probeIPv6()
   probeLanConnectivity(settingsStore.networkInfo.host_lan_ips, settingsStore.networkInfo.server_port)
   // Check auth

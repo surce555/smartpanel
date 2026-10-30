@@ -15,7 +15,7 @@ const currentActiveMode = computed(() => {
   }
 
   // Auto evaluation — must mirror `resolveBookmarkUrl` exactly, otherwise the
-  // badge would claim "内网直连" while the cards actually open the IPv6 URL.
+  // badge would claim "IPv6 直连" while the cards actually open the domain URL.
   const hostname = window.location.hostname
 
   if (isLanEntry(hostname, settingsStore.networkInfo.lan_domain)) {
@@ -24,10 +24,8 @@ const currentActiveMode = computed(() => {
   if (isIPv6Host(hostname)) {
     return 'ipv6'
   }
-  if (isIPv6Available.value === false) {
-    return 'domain'
-  }
-  return 'ipv6'
+  // Fail-safe: IPv6 only when positively confirmed, matching the resolver.
+  return isIPv6Available.value === true ? 'ipv6' : 'domain'
 })
 
 const badgeConfig = computed(() => {

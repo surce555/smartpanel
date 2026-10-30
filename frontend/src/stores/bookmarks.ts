@@ -135,18 +135,23 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
-    // (c) Opened through the public domain: IPv6 dual-stack direct first,
-    //     then the Cloudflare Tunnel fallback.
-    //     `isIPv6Available === false` means an active probe proved IPv6 is dead.
-    //     `null` only means "not probed yet / inconclusive" — in that case still
-    //     prefer IPv6, because a failed <img> probe on a public domain is usually
-    //     mixed-content blocking, not proof that the NAS lacks IPv6.
-    if (isIPv6Available.value !== false && v6Url) {
+    // (c) Opened through the public domain: use the Cloudflare/Tunnel domain in
+    //     hand unless IPv6 has been POSITIVELY confirmed working.
+    //
+    //     Fail-safe, not fail-open. The previous version routed to the IPv6 URL
+    //     whenever `isIPv6Available !== false`, which includes `null` (never
+    //     probed / probe inconclusive). On an IPv4-only network that sent every
+    //     card to an unreachable IPv6 address — the page simply did not open.
+    //     Now IPv6 requires a confirmed `true`; anything else falls back to the
+    //     domain the user is already successfully browsing through.
+    if (isIPv6Available.value === true && v6Url) {
       return v6Url
     }
     if (fallbackUrl) {
       return fallbackUrl
     }
+    // No fallback configured: last resort, without a known-good domain there is
+    // nothing better than the IPv6 template.
     if (v6Url) {
       return v6Url
     }

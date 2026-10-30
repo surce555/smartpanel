@@ -42,6 +42,41 @@ export function isLanEntry(hostname: string, lanDomain?: string): boolean {
   return false
 }
 
+/**
+ * Cached IPv6 probe result.
+ *
+ * Stored as `<0|1>:<epoch-ms>` so the answer expires. A bare boolean kept for
+ * the entire session meant a laptop that probed on Wi-Fi kept using that result
+ * after switching to an IPv4-only mobile hotspot, silently breaking routing.
+ */
+const IPV6_CACHE_KEY = 'smartpanel_ipv6_probe'
+const IPV6_CACHE_TTL_MS = 5 * 60 * 1000
+
+function readIPv6Cache(): boolean | null {
+  try {
+    const raw = sessionStorage.getItem(IPV6_CACHE_KEY)
+    if (!raw) return null
+    const [flag, tsRaw] = raw.split(':')
+    if (flag !== '0' && flag !== '1') return null
+    const ts = Number(tsRaw)
+    if (!Number.isFinite(ts) || Date.now() - ts > IPV6_CACHE_TTL_MS) {
+      sessionStorage.removeItem(IPV6_CACHE_KEY)
+      return null
+    }
+    return flag === '1'
+  } catch {
+    return null
+  }
+}
+
+function writeIPv6Cache(available: boolean) {
+  try {
+    sessionStorage.setItem(IPV6_CACHE_KEY, `${available ? '1' : '0'}:${Date.now()}`)
+  } catch {
+    // sessionStorage may be unavailable (private mode / quota); probing still works.
+  }
+}
+
 export function useIPv6Probe() {
   function setRoutePreference(mode: 'auto' | 'lan' | 'ipv6' | 'domain') {
     routePreference.value = mode
@@ -49,77 +84,83 @@ export function useIPv6Probe() {
   }
 
   /**
-   * Probe IPv6 connectivity using high-speed domestic IPv6 endpoints
-   * (e.g. 6.ipw.cn, speed.neu6.edu.cn).
+   * Probe IPv6 connectivity using endpoints that only resolve over IPv6.
+   *
+   * Uses `fetch(..., { mode: 'no-cors' })` instead of an <img> probe. The old
+   * implementation resolved `true` from `img.onerror`, on the assumption that
+   * "an error on an IPv6-only host means DNS/TCP succeeded". That assumption is
+   * wrong: on a network without IPv6 the AAAA lookup fails and the request
+   * errors out *immediately*, which also fires `onerror` — so every IPv4-only
+   * client was reported as "IPv6 available" and every card link was routed to
+   * an unreachable IPv6 address.
+   *
+   * `fetch` gives a real discriminator: it RESOLVES once the response headers
+   * arrive (an opaque response for no-cors counts), and only REJECTS when the
+   * network layer itself failed. So:
+   *   resolve -> IPv6 really works
+   *   reject  -> IPv6 is unusable (or too slow to be worth using)
    */
-  async function probeIPv6(customProbeUrl?: string, timeoutMs: number = 800): Promise<boolean> {
-    // 1. If currently visiting via IPv6 directly, IPv6 is 100% available!
+  async function probeSingleIPv6Endpoint(url: string, timeout: number): Promise<boolean> {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), timeout)
+    try {
+      await fetch(`${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`, {
+        mode: 'no-cors',
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'follow',
+        signal: controller.signal,
+      })
+      return true
+    } catch {
+      // Network error, DNS failure, TLS failure or timeout.
+      return false
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function probeIPv6(customProbeUrl?: string, timeoutMs: number = 1500): Promise<boolean> {
+    // 1. Already browsing over IPv6: no probe needed.
     if (isIPv6Host(window.location.hostname)) {
       isIPv6Available.value = true
-      sessionStorage.setItem('smartpanel_ipv6_probe', 'true')
+      writeIPv6Cache(true)
       return true
     }
 
-    // 2. Check sessionStorage cache
-    const cached = sessionStorage.getItem('smartpanel_ipv6_probe')
+    // 2. Reuse a recent result. Cached with a timestamp: the old code stored a
+    //    bare flag for the whole session, so moving between networks (Wi-Fi to
+    //    cellular) kept the stale answer until the tab was closed.
+    const cached = readIPv6Cache()
     if (cached !== null) {
-      isIPv6Available.value = cached === 'true'
-      return isIPv6Available.value
+      isIPv6Available.value = cached
+      return cached
     }
 
     isProbing.value = true
 
-    // Candidate endpoints that only resolve over IPv6
+    // Only IPv6-reachable hosts: they either have no A record at all, or resolve
+    // to something unusable over IPv4, so a successful fetch implies IPv6.
     const endpoints = [
       customProbeUrl,
-      'https://6.ipw.cn/favicon.ico',
-      'https://speed.neu6.edu.cn/favicon.ico',
+      'https://6.ipw.cn',
+      'https://speed.neu6.edu.cn',
     ].filter(Boolean) as string[]
 
-    const probeSingle = (url: string, timeout: number): Promise<boolean> => {
-      return new Promise<boolean>((resolve) => {
-        const img = new Image()
-        let timer: number | null = null
-
-        const cleanup = () => {
-          if (timer) clearTimeout(timer)
-          img.onload = null
-          img.onerror = null
-        }
-
-        timer = window.setTimeout(() => {
-          cleanup()
-          resolve(false)
-        }, timeout)
-
-        img.onload = () => {
-          cleanup()
-          resolve(true)
-        }
-
-        img.onerror = () => {
-          cleanup()
-          // An onerror from an IPv6-only domain means DNS and TCP handshake succeeded
-          resolve(true)
-        }
-
-        img.src = `${url}?_t=${Date.now()}`
-      })
-    }
-
     try {
-      // Race or probe first reliable endpoint
-      let result = await probeSingle(endpoints[0], timeoutMs)
-      if (!result && endpoints.length > 1) {
-        result = await probeSingle(endpoints[1], timeoutMs)
-      }
+      // Race them in parallel: one success is enough, and this is faster than
+      // walking the list one by one.
+      const results = await Promise.all(
+        endpoints.map((url) => probeSingleIPv6Endpoint(url, timeoutMs))
+      )
+      const available = results.some(Boolean)
 
-      isIPv6Available.value = result
-      sessionStorage.setItem('smartpanel_ipv6_probe', String(result))
-      return result
+      isIPv6Available.value = available
+      writeIPv6Cache(available)
+      return available
     } catch {
       isIPv6Available.value = false
-      sessionStorage.setItem('smartpanel_ipv6_probe', 'false')
+      writeIPv6Cache(false)
       return false
     } finally {
       isProbing.value = false
@@ -165,7 +206,11 @@ export function useIPv6Probe() {
   }
 
   function clearProbeCache() {
-    sessionStorage.removeItem('smartpanel_ipv6_probe')
+    try {
+      sessionStorage.removeItem(IPV6_CACHE_KEY)
+    } catch {
+      // ignore
+    }
     isIPv6Available.value = null
     isLanAvailable.value = null
   }
