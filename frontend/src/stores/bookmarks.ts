@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useSettingsStore, NetworkInfo } from './settings'
-import { useIPv6Probe, isIPv6Host, isLanEntry } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
 
 export interface Tag {
   id: string
@@ -87,35 +87,11 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   }
 
   /**
-   * Whether the current visitor is genuinely on the same LAN as the NAS.
-   *
-   * Two independent sources, either of which is sufficient:
-   *
-   *  - the access origin: private IP / localhost / *.local / *.lan / lan_domain
-   *    — proves the page itself was opened through the LAN entry;
-   *  - the backend's `is_client_lan`, which is computed from the VISITOR's real
-   *    address. This is the only usable signal when the panel is opened through
-   *    the public domain but the visitor happens to sit in the same house: the
-   *    hostname is public, yet the traffic never leaves the LAN.
-   *
-   * `is_client_lan` is safe to trust now because the backend resolves the
-   * visitor address from CF-Connecting-IP / X-Forwarded-For instead of the TCP
-   * peer, which behind a tunnel is Cloudflare's edge and would otherwise make
-   * this permanently false.
-   */
-  function isAccessingViaLanEntry(): boolean {
-    const net = settingsStore.networkInfo
-    if (isLanEntry(window.location.hostname, net.lan_domain)) return true
-    return net.is_client_lan === true
-  }
-
-  /**
-   * Resolve final URL for a bookmark dynamically based on the current entry point
-   *
-   * Auto priority hierarchy:
-   * 1. 通过内网地址 / 内网域名访问 -> 内网直连 (url_internal)
-   * 2. 通过 IPv6 地址访问         -> IPv6 直连 (url_public_template)
-   * 3. 通过公网域名访问           -> IPv6 可用则直连, 否则域名回退 (url_fallback)
+   * Resolve final URL for a bookmark dynamically based on network state
+   * Priority hierarchy:
+   * 1. 内网直连 (url_internal)
+   * 2. IPv6 直连 (url_public_template)
+   * 3. 域名代理回退 (url_fallback)
    */
   function resolveBookmarkUrl(b: Bookmark): string {
     const net = settingsStore.networkInfo
@@ -124,7 +100,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     const v6Url = getV6Url(b, net)
     const fallbackUrl = getFallbackUrl(b, net)
 
-    // 1. Explicit preference overrides (user forced a mode via the route badge)
+    // 1. Explicit preference overrides
     if (pref === 'lan') {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
@@ -135,43 +111,28 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       return fallbackUrl || v6Url || internalUrl || '#'
     }
 
-    // 2. Auto Routing
+    // 2. Auto Routing (智能优选: 内网 ➔ IPv6 ➔ 域名)
     const hostname = window.location.hostname
 
-    // (a) Opened through the LAN entry (private IP / *.lan / lan_domain).
-    //     The browser proved it can reach the NAS internally, so prefer it.
-    if (isAccessingViaLanEntry()) {
+    // (a) Visiting via LAN IP / hostname: prioritize internal URL
+    if (isLanHost(hostname)) {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
 
-    // (b) Opened through a bare IPv6 address: the client is IPv6-capable.
+    // (b) Visiting via IPv6 host: prioritize IPv6 template
     if (isIPv6Host(hostname)) {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
-    // (c) Opened through the public domain: prefer the IPv6 direct-connect
-    //     template, fall back to the Cloudflare/Tunnel domain.
-    //
-    //     The probe may only VETO, never permit. `!== false` means "anything
-    //     except a confirmed failure", so `null` (not probed yet, or the probe
-    //     was inconclusive) still prefers IPv6.
-    //
-    //     This matters because an active probe from an HTTPS page to an
-    //     `http://[ipv6]:port` target is blocked as mixed content: the request
-    //     never leaves the browser, so the probe reports failure even though the
-    //     host is perfectly reachable. Requiring `=== true` therefore pinned
-    //     every such client to the CF domain. Only an explicit `false` — a probe
-    //     that actually ran and actually failed — downgrades to the domain.
+    // (c) Visiting via Domain (e.g. pan.yourdomain.com):
+    // Prioritize IPv6 if available; fallback to domain proxy; finally fallback to internal
     if (isIPv6Available.value !== false && v6Url) {
       return v6Url
     }
     if (fallbackUrl) {
       return fallbackUrl
     }
-    if (v6Url) {
-      return v6Url
-    }
-    return internalUrl || '#'
+    return internalUrl || v6Url || '#'
   }
 
   // Filtered bookmarks

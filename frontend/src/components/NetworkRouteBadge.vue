@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useIPv6Probe, isIPv6Host, isLanEntry } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
-const { isIPv6Available, lastProbeDetail, routePreference, setRoutePreference } = useIPv6Probe()
+const { isIPv6Available, routePreference, setRoutePreference, probeIPv6 } = useIPv6Probe()
 const settingsStore = useSettingsStore()
 
 const showMenu = ref(false)
@@ -14,21 +14,17 @@ const currentActiveMode = computed(() => {
     return routePreference.value
   }
 
-  // Auto evaluation — must mirror `resolveBookmarkUrl` exactly, otherwise the
-  // badge would claim one mode while the cards actually open another.
-  const hostname = window.location.hostname
-  const net = settingsStore.networkInfo
-
-  // Same LAN rule as the resolver: access origin OR the backend's view of the
-  // visitor address.
-  if (isLanEntry(hostname, net.lan_domain) || net.is_client_lan === true) {
+  // Auto evaluation:
+  if (isLanHost(window.location.hostname)) {
     return 'lan'
   }
-  if (isIPv6Host(hostname)) {
+  if (isIPv6Host(window.location.hostname) || isIPv6Available.value === true) {
     return 'ipv6'
   }
-  // Mirrors the resolver's veto semantics: IPv6 unless explicitly disproved.
-  return isIPv6Available.value !== false ? 'ipv6' : 'domain'
+  if (isIPv6Available.value === false) {
+    return 'domain'
+  }
+  return 'probing'
 })
 
 const badgeConfig = computed(() => {
@@ -63,15 +59,16 @@ const badgeConfig = computed(() => {
         icon: 'tabler:world',
         desc: '当前走 Cloudflare 域名代理回源通道',
       }
+    case 'probing':
     default:
       return {
-        label: routePreference.value === 'auto' ? 'IPv6 直连' : '强制 IPv6',
-        dotColor: 'bg-emerald-500',
-        textColor: 'text-emerald-700 dark:text-emerald-300',
-        bgColor: 'bg-emerald-100/80 dark:bg-emerald-950/60',
-        borderColor: 'border-emerald-200 dark:border-emerald-800',
-        icon: 'tabler:bolt',
-        desc: '当前通过公网 IPv6 高速直连 NAS',
+        label: '探测中...',
+        dotColor: 'bg-slate-400 animate-pulse',
+        textColor: 'text-slate-500 dark:text-slate-400',
+        bgColor: 'bg-slate-100 dark:bg-slate-800',
+        borderColor: 'border-slate-200 dark:border-slate-700',
+        icon: 'tabler:loader',
+        desc: '正在智能探测您的网络环境',
       }
   }
 })
@@ -147,18 +144,6 @@ onUnmounted(() => {
       <div class="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
         <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">网络分流优先级</div>
         <div class="text-[10px] text-slate-400">决定点击书签卡片时优先跳转的连接模式</div>
-      </div>
-
-      <!-- Live diagnosis: shows what the IPv6 probe actually observed, so a
-           mis-routed client can be debugged from the UI. -->
-      <div
-        v-if="lastProbeDetail"
-        class="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
-      >
-        <div class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">IPv6 探测结果</div>
-        <div class="text-[10px] leading-relaxed text-slate-600 dark:text-slate-300 break-all font-mono">
-          {{ lastProbeDetail }}
-        </div>
       </div>
 
       <button

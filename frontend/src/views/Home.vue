@@ -173,9 +173,7 @@ onMounted(async () => {
     router.replace({ name: 'Login', query: { redirect: '/' } })
     return
   }
-  // IPv6 probing is centralised in App.vue, which passes the backend-reported
-  // client IP. Re-probing here without that hint could race the good result and
-  // downgrade an IPv6 client to the domain fallback.
+  probeIPv6()
   window.addEventListener('click', handleOutsideClick)
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('mousemove', resetIdleTimer)
@@ -192,28 +190,7 @@ onMounted(async () => {
     theme.injectCustomJS(settingsStore.customJs)
   }
   await bookmarksStore.fetchAll()
-  await probeClientIPv6()
 })
-
-/**
- * Decide whether THIS CLIENT can use IPv6, after bookmarks are loaded.
- *
- * `client_has_ipv6` from the backend is the primary signal: it is derived from
- * the visitor's real address (CF-Connecting-IP / XFF when proxied), so it stays
- * correct even when the browser's own probe cannot reach third-party hosts
- * because a proxy/VPN has no IPv6 egress.
- */
-async function probeClientIPv6() {
-  const net = settingsStore.networkInfo
-  await probeIPv6(undefined, undefined, {
-    clientIP: net.client_ip,
-    directIPv6: net.direct_ipv6,
-    clientHasIPv6: net.client_has_ipv6,
-    viaCloudflare: net.via_cloudflare,
-    // Re-probe here regardless of any earlier answer from App.vue.
-    force: true,
-  })
-}
 
 onUnmounted(() => {
   window.removeEventListener('click', handleOutsideClick)
@@ -491,12 +468,6 @@ function toggleTag(tagId: string) {
             />
           </button>
         </div>
-      </div>
-
-      <!-- Network Routing Status & Switcher -->
-      <div class="pt-2 border-t border-white/10 flex items-center justify-between">
-        <span class="text-[11px] font-semibold text-white/70">网络分流路由</span>
-        <NetworkRouteBadge />
       </div>
 
       <!-- Quick Actions -->

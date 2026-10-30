@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const { initTheme } = useTheme()
-const { probeIPv6, probeLanConnectivity } = useIPv6Probe()
+const { probeIPv6 } = useIPv6Probe()
 const authStore = useAuthStore()
 
 const isLoginRoute = computed(() => route.name === 'Login')
@@ -54,16 +54,8 @@ onMounted(async () => {
   await settingsStore.fetchSettings()
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
-
-  // Decide whether THIS CLIENT can use IPv6. A second pass runs from Home.vue
-  // once bookmarks are loaded; this one gets the badge right on first paint.
-  const net = settingsStore.networkInfo
-  probeIPv6(undefined, undefined, {
-    clientIP: net.client_ip,
-    directIPv6: net.direct_ipv6,
-    viaCloudflare: net.via_cloudflare,
-  })
-  probeLanConnectivity(net.host_lan_ips, net.server_port)
+  // Probe IPv6 in background
+  probeIPv6()
   // Check auth
   authStore.fetchMe()
 })
