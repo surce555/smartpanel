@@ -227,6 +227,36 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     }
   }
 
+  /**
+   * Derive the IPv6 probe parameters from the bookmarks' actual URL templates.
+   *
+   * The NAS IPv6 address changes on every boot, so it must never be hardcoded —
+   * the template is the source of truth. Templates look like
+   * `http://[{ipv6}]:5666` or `https://{v6domain}:5666`, and the scheme/port in
+   * them decide how the probe must be built. Probing an HTTP endpoint over HTTPS
+   * (or the wrong port) fails the handshake and reads as "IPv6 unavailable".
+   */
+  function deriveIPv6ProbeParams(): {
+    scheme: 'http' | 'https'
+    port: string
+    hostTemplate: string
+  } {
+    const withTemplate = bookmarks.value.find((b) => (b.url_public_template || '').trim())
+    const template = (withTemplate?.url_public_template || '').trim()
+
+    let scheme: 'http' | 'https' = 'http'
+    if (/^https:\/\//i.test(template)) scheme = 'https'
+    else if (/^http:\/\//i.test(template)) scheme = 'http'
+
+    // Port from the template (e.g. `:5666`), else the panel's own port.
+    let port = ''
+    const portMatch = template.match(/\]:(\d+)/) || template.match(/:(\d+)(?:\/|$)/)
+    if (portMatch) port = portMatch[1]
+    if (!port) port = settingsStore.networkInfo.server_port || ''
+
+    return { scheme, port, hostTemplate: template }
+  }
+
   async function createBookmark(data: Partial<Bookmark>) {
     const api = useApi()
     const resp = await api.post('/bookmarks', data)
@@ -349,6 +379,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     filteredBookmarks,
     groupedBookmarks,
     resolveBookmarkUrl,
+    deriveIPv6ProbeParams,
     fetchAll,
     createBookmark,
     updateBookmark,

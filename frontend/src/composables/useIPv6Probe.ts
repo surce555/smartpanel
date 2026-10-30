@@ -108,28 +108,40 @@ function writeIPv6Cache(available: boolean) {
 }
 
 /**
- * Build the probe URL for the user's IPv6 direct-connect host.
+ * Build the probe URL for an IPv6 direct-connect host.
  *
  * Accepted inputs (as stored by the admin UI / bookmark templates):
  *   v6.example.com
  *   v6.example.com:5666
  *   https://v6.example.com:5666
- *   [2408:8214::1]:5666          (bare IPv6 literal with port)
+ *   [2408:8214::1]:5666          (bracketed literal with port)
  *   2408:8214::1
  *
- * The port must survive: bookmark templates point at `v6.example.com:5666`, and
- * forcing a bare `https://host` (implicit 443) probed a port nothing listens on,
- * which read as "IPv6 unavailable" and downgraded the client to the CF domain.
+ * Two things must survive, because bookmark templates rely on them:
+ *
+ *  - the PORT. Templates point at `...:5666`; forcing an implicit :443 probes a
+ *    port nothing listens on and reports "IPv6 unavailable".
+ *  - the SCHEME. Templates commonly use plain `http://[{ipv6}]:5666`. Probing an
+ *    HTTP endpoint over HTTPS fails the TLS handshake, which likewise reads as
+ *    "unreachable" even though the host is perfectly reachable.
+ *
+ * @param fallbackScheme scheme to use when the input carries none. Callers pass
+ *        the scheme observed in the bookmark template.
  */
-export function buildV6ProbeUrl(v6domain?: string, fallbackPort?: string): string {
+export function buildV6ProbeUrl(
+  v6domain?: string,
+  fallbackPort?: string,
+  fallbackScheme: 'http' | 'https' = 'http'
+): string {
   let raw = (v6domain || '').trim()
   if (!raw) return ''
 
-  let scheme = 'https://'
+  let scheme = `${fallbackScheme}://`
   if (/^http:\/\//i.test(raw)) {
     scheme = 'http://'
     raw = raw.replace(/^http:\/\//i, '')
   } else if (/^https:\/\//i.test(raw)) {
+    scheme = 'https://'
     raw = raw.replace(/^https:\/\//i, '')
   }
 
@@ -152,14 +164,26 @@ export function buildV6ProbeUrl(v6domain?: string, fallbackPort?: string): strin
   if (isBareV6) {
     // A bare IPv6 literal cannot be told apart from `host:port` by colon count
     // alone, so it must always be bracketed. The port goes OUTSIDE the brackets:
-    //   https://[2408:8214::1]:5666   (correct)
-    //   https://[2408:8214::1:5666]   (invalid - port swallowed into the literal)
+    //   http://[2408:8214::1]:5666   (correct)
+    //   http://[2408:8214::1:5666]   (invalid - port swallowed into the literal)
     return port ? `${scheme}[${raw}]:${port}` : `${scheme}[${raw}]`
   }
 
   const hasPort = /:\d+$/.test(raw)
   if (!hasPort && port) return `${scheme}${raw}:${port}`
   return `${scheme}${raw}`
+}
+
+/**
+ * Extract the scheme from a bookmark URL template, defaulting to http.
+ * `http://[{ipv6}]:5666` -> 'http'.
+ */
+export function schemeFromTemplate(template?: string): 'http' | 'https' {
+  const t = (template || '').trim().toLowerCase()
+  if (t.startsWith('https://')) return 'https'
+  if (t.startsWith('http://')) return 'http'
+  // No template: prefer http on the typical NAS port, https otherwise.
+  return 'http'
 }
 
 export function useIPv6Probe() {
@@ -244,6 +268,8 @@ export function useIPv6Probe() {
       v6domain?: string
       v6port?: string
       currentIPv6?: string
+      /** scheme used by the bookmark template, e.g. 'http' for http://[{ipv6}]:5666 */
+      scheme?: 'http' | 'https'
       probeSelfUrl?: string
       force?: boolean
     } = {}
@@ -275,13 +301,15 @@ export function useIPv6Probe() {
     isProbing.value = true
     try {
       // Build the v6 targets. Bookmark templates can use either `{v6domain}`
-      // (`v6.example.com:5666`) or `{ipv6}` (`[2408:...]:5666`), so both are
-      // probed: whichever form the user's cards actually use is the one that
-      // matters.
+      // (`v6.example.com:5666`) or `{ipv6}` (`[2408:...]:5666`), so both forms
+      // are probed: whichever form the user's cards actually use is the one that
+      // matters. The scheme comes from the bookmark template (`http://` in the
+      // common NAS setup), never an assumed https.
+      const scheme = opts.scheme || 'http'
       const candidates: string[] = []
-      const v6ByDomain = buildV6ProbeUrl(opts.v6domain, opts.v6port)
+      const v6ByDomain = buildV6ProbeUrl(opts.v6domain, opts.v6port, scheme)
       if (v6ByDomain) candidates.push(v6ByDomain)
-      const v6ByAddress = buildV6ProbeUrl(opts.currentIPv6, opts.v6port)
+      const v6ByAddress = buildV6ProbeUrl(opts.currentIPv6, opts.v6port, scheme)
       if (v6ByAddress && !candidates.includes(v6ByAddress)) candidates.push(v6ByAddress)
 
       const parts: string[] = []

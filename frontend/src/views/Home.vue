@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
+import { useIPv6Probe } from '@/composables/useIPv6Probe'
 import { Bookmark } from '@/stores/bookmarks'
 import SearchBar from '@/components/SearchBar.vue'
 import GroupSection from '@/components/GroupSection.vue'
@@ -24,6 +25,7 @@ const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const theme = useTheme()
+const { probeIPv6 } = useIPv6Probe()
 
 // Modals state
 const showBookmarkModal = ref<boolean>(false)
@@ -190,7 +192,33 @@ onMounted(async () => {
     theme.injectCustomJS(settingsStore.customJs)
   }
   await bookmarksStore.fetchAll()
+  await probeIPv6FromTemplates()
 })
+
+/**
+ * Probe IPv6 using the scheme/port from the bookmarks' real URL templates.
+ *
+ * The NAS IPv6 address changes on every boot, so neither the address nor the
+ * probe URL can be hardcoded: the template (`http://[{ipv6}]:5666`) is the
+ * source of truth for scheme, host form and port. Runs after bookmarks load so
+ * the profile matches what the cards actually link to.
+ */
+async function probeIPv6FromTemplates() {
+  const net = settingsStore.networkInfo
+  const { scheme, port } = bookmarksStore.deriveIPv6ProbeParams()
+  await probeIPv6(undefined, undefined, {
+    clientIP: net.client_ip,
+    directIPv6: net.direct_ipv6,
+    viaCloudflare: net.via_cloudflare,
+    v6domain: net.v6domain,
+    currentIPv6: net.current_ipv6 || net.detected_host_ipv6,
+    v6port: port,
+    scheme,
+    // Re-probe here even if App.vue already cached a negative result from
+    // before the templates were known.
+    force: true,
+  })
+}
 
 onUnmounted(() => {
   window.removeEventListener('click', handleOutsideClick)

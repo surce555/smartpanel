@@ -55,20 +55,16 @@ onMounted(async () => {
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
 
-  // IPv6 routing decision. Ordering: LAN > IPv6 > CF domain.
-  //
-  // Behind the Cloudflare edge the backend cannot prove direct IPv6 reachability,
-  // so the decisive test is whether the client can actually reach the configured
-  // IPv6 direct-connect host (v6domain:port) — that is the exact host the cards
-  // link to. Public endpoints like 6.ipw.cn are only a last resort because they
-  // are often blocked on mainland networks.
+  // Preliminary IPv6 decision for the first paint. A definitive probe runs from
+  // Home.vue once the bookmark templates are loaded, because those carry the
+  // real scheme/port (`http://[{ipv6}]:5666`); the IPv6 address itself changes on
+  // every NAS boot, so it always comes from the backend, never from a constant.
   const net = settingsStore.networkInfo
   probeIPv6(undefined, undefined, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     viaCloudflare: net.via_cloudflare,
     v6domain: net.v6domain,
-    // `{ipv6}` templates use the NAS's detected address; probe that form too.
     currentIPv6: net.current_ipv6 || net.detected_host_ipv6,
     v6port: net.server_port,
   })
