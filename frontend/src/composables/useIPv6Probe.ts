@@ -233,6 +233,20 @@ export function useIPv6Probe() {
   }
 
   /**
+   * Whether probing `target` from the current page is blocked by the browser
+   * before any request is made.
+   *
+   * An HTTPS page cannot `fetch` an `http://` URL: the mixed-content policy kills
+   * it synchronously, so the request never reaches the network. Reporting that
+   * as "IPv6 unreachable" is simply false — the host may be perfectly reachable,
+   * which is exactly why clicking the card (a top-level navigation, not subject
+   * to mixed-content rules) opens it fine.
+   */
+  function isProbeBlockedByMixedContent(target: string): boolean {
+    return window.location.protocol === 'https:' && /^http:\/\//i.test(target)
+  }
+
+  /**
    * Probe IPv6 dual-stack reachability.
    *
    * @param opts.v6domain    the user's IPv6 direct-connect host, exactly as it
@@ -316,18 +330,31 @@ export function useIPv6Probe() {
 
       // 3. Probe the user's own IPv6 endpoints first — most relevant evidence.
       if (candidates.length > 0) {
-        const reachable = await Promise.all(
-          candidates.map(async (url) => ({ url, ok: await probeSingleIPv6Endpoint(url, timeoutMs) }))
-        )
-        for (const r of reachable) {
-          parts.push(`${r.url} -> ${r.ok ? '可达' : '不可达'}`)
+        const blocked = candidates.filter((u) => isProbeBlockedByMixedContent(u))
+        const testable = candidates.filter((u) => !isProbeBlockedByMixedContent(u))
+
+        for (const u of blocked) {
+          parts.push(`${u} -> 被混合内容策略拦截，无法判定`)
         }
-        if (reachable.some((r) => r.ok)) {
+
+        if (testable.length > 0) {
+          const reachable = await Promise.all(
+            testable.map(async (url) => ({ url, ok: await probeSingleIPv6Endpoint(url, timeoutMs) }))
+          )
+          for (const r of reachable) {
+            parts.push(`${r.url} -> ${r.ok ? '可达' : '不可达'}`)
+          }
+          if (reachable.some((r) => r.ok)) {
+            lastProbeDetail.value = parts.join('; ')
+            return setIPv6Result(true)
+          }
+        } else if (blocked.length > 0) {
+          // Every candidate was blocked client-side. This is NOT evidence that
+          // IPv6 is down — leave the state undecided (null) so the resolver keeps
+          // preferring IPv6, exactly like a top-level navigation would.
           lastProbeDetail.value = parts.join('; ')
-          return setIPv6Result(true)
+          return setIPv6Result(null)
         }
-        // None answered. Fall through to the generic probes: a failure here can
-        // be a certificate/hostname problem rather than a missing IPv6 stack.
       } else {
         parts.push('未配置 IPv6 直连域名/地址，跳过自测')
       }
@@ -337,8 +364,14 @@ export function useIPv6Probe() {
       if (opts.probeSelfUrl) endpoints.push(opts.probeSelfUrl)
       endpoints.push('https://6.ipw.cn', 'https://speed.neu6.edu.cn')
 
+      const probeable = endpoints.filter((u) => !isProbeBlockedByMixedContent(u))
+      if (probeable.length === 0) {
+        lastProbeDetail.value = parts.join('; ')
+        return setIPv6Result(null)
+      }
+
       const results = await Promise.all(
-        endpoints.map((url) => probeSingleIPv6Endpoint(url, timeoutMs))
+        probeable.map((url) => probeSingleIPv6Endpoint(url, timeoutMs))
       )
       const available = results.some(Boolean)
       parts.push(`公网探测 ${available ? '可达' : '全部不可达'}`)
@@ -349,14 +382,29 @@ export function useIPv6Probe() {
       return setIPv6Result(available)
     } catch {
       lastProbeDetail.value = (lastProbeDetail.value || '') + '; 探测异常'
-      return setIPv6Result(false)
+      return setIPv6Result(null)
     } finally {
       isProbing.value = false
     }
   }
 
-  function setIPv6Result(available: boolean): boolean {
+  /**
+   * Record the probe outcome.
+   *
+   * `null` means "undetermined" — the probe could not run (e.g. blocked as mixed
+   * content) or hit an unexpected error. It must NOT be cached and must NOT be
+   * treated as a failure: the resolver only downgrades on an explicit `false`.
+   */
+  function setIPv6Result(available: boolean | null): boolean {
     isIPv6Available.value = available
+    if (available === null) {
+      try {
+        sessionStorage.removeItem(IPV6_CACHE_KEY)
+      } catch {
+        // ignore
+      }
+      return false
+    }
     writeIPv6Cache(available)
     return available
   }

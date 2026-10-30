@@ -135,23 +135,25 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
-    // (c) Opened through the public domain: use the Cloudflare/Tunnel domain in
-    //     hand unless IPv6 has been POSITIVELY confirmed working.
+    // (c) Opened through the public domain: prefer the IPv6 direct-connect
+    //     template, fall back to the Cloudflare/Tunnel domain.
     //
-    //     Fail-safe, not fail-open. The previous version routed to the IPv6 URL
-    //     whenever `isIPv6Available !== false`, which includes `null` (never
-    //     probed / probe inconclusive). On an IPv4-only network that sent every
-    //     card to an unreachable IPv6 address — the page simply did not open.
-    //     Now IPv6 requires a confirmed `true`; anything else falls back to the
-    //     domain the user is already successfully browsing through.
-    if (isIPv6Available.value === true && v6Url) {
+    //     The probe may only VETO, never permit. `!== false` means "anything
+    //     except a confirmed failure", so `null` (not probed yet, or the probe
+    //     was inconclusive) still prefers IPv6.
+    //
+    //     This matters because an active probe from an HTTPS page to an
+    //     `http://[ipv6]:port` target is blocked as mixed content: the request
+    //     never leaves the browser, so the probe reports failure even though the
+    //     host is perfectly reachable. Requiring `=== true` therefore pinned
+    //     every such client to the CF domain. Only an explicit `false` — a probe
+    //     that actually ran and actually failed — downgrades to the domain.
+    if (isIPv6Available.value !== false && v6Url) {
       return v6Url
     }
     if (fallbackUrl) {
       return fallbackUrl
     }
-    // No fallback configured: last resort, without a known-good domain there is
-    // nothing better than the IPv6 template.
     if (v6Url) {
       return v6Url
     }
