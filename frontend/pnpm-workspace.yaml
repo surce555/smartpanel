@@ -1,0 +1,15 @@
+# pnpm 10+ moved dependency build-script approval out of package.json into this
+# workspace file. Both keys are kept so the repository builds with the pnpm 9
+# used by the Dockerfile AND with newer local pnpm releases:
+#   - onlyBuiltDependencies: pnpm 9/10 format
+#   - allowBuilds:           pnpm 11+ format
+#
+# Without this, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS and the Docker
+# build fails before Vite ever runs.
+onlyBuiltDependencies:
+  - esbuild
+  - vue-demi
+
+allowBuilds:
+  esbuild: true
+  vue-demi: true

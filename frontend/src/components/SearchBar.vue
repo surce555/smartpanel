@@ -16,7 +16,7 @@ interface SearchEngine {
   url: string
 }
 
-const engines: SearchEngine[] = [
+const engines = computed<SearchEngine[]>(() => [
   {
     id: 'bing',
     name: 'Bing',
@@ -39,12 +39,15 @@ const engines: SearchEngine[] = [
     id: 'custom',
     name: '自定义',
     icon: 'tabler:world-search',
-    url: settingsStore.searchCustomUrl,
+    // Read through the store on every render: the previous plain array captured
+    // the value once at setup time, so editing the custom engine URL in
+    // settings had no effect until a full page reload.
+    url: settingsStore.searchCustomUrl || 'https://www.google.com/search?q=%s',
   },
-]
+])
 
 const currentEngine = computed(() => {
-  return engines.find((e) => e.id === settingsStore.searchEngine) || engines[0]
+  return engines.value.find((e) => e.id === settingsStore.searchEngine) || engines.value[0]
 })
 
 function selectEngine(id: string) {

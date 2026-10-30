@@ -24,6 +24,24 @@ export function isIPv6Host(hostname: string): boolean {
   return hostname.includes(':') || hostname.startsWith('[') || /^([0-9a-fA-F]{1,4}:){2,}/.test(hostname)
 }
 
+/**
+ * Whether the page is currently opened through a LAN entry.
+ *
+ * Only the *access origin* matters here. Reachability hints such as "the client
+ * can also reach the NAS over LAN" must NOT be treated as "in LAN", otherwise
+ * opening the panel via the public domain would force every card link onto the
+ * internal URL and silently disable IPv6 / domain dual-stack routing.
+ */
+export function isLanEntry(hostname: string, lanDomain?: string): boolean {
+  if (!hostname) return false
+  if (isLanHost(hostname)) return true
+  const cleanDomain = (lanDomain || '').trim().replace(/^\*?\./, '')
+  if (cleanDomain && (hostname === cleanDomain || hostname.endsWith(`.${cleanDomain}`))) {
+    return true
+  }
+  return false
+}
+
 export function useIPv6Probe() {
   function setRoutePreference(mode: 'auto' | 'lan' | 'ipv6' | 'domain') {
     routePreference.value = mode

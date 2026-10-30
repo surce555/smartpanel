@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,6 +21,41 @@ import (
 )
 
 type BookmarkHandler struct{}
+
+// isInternalHost reports whether hostname belongs to a private / loopback /
+// link-local address space, i.e. something only reachable from the LAN.
+func isInternalHost(hostname string) bool {
+	h := strings.Trim(strings.ToLower(strings.TrimSpace(hostname)), "[]")
+	if h == "" {
+		return true
+	}
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") ||
+		strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".lan") ||
+		strings.HasSuffix(h, ".internal") || strings.HasSuffix(h, ".home.arpa") {
+		return true
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	}
+	// Hostnames without a dot are usually resolved through local DNS suffixes.
+	return !strings.Contains(h, ".")
+}
+
+// isBlockedTargetHost blocks cloud metadata endpoints, which are the classic
+// SSRF escalation target and are never a legitimate bookmark icon source.
+func isBlockedTargetHost(hostname string) bool {
+	h := strings.Trim(strings.ToLower(strings.TrimSpace(hostname)), "[]")
+	switch h {
+	case "metadata.google.internal", "metadata.goog", "instance-data":
+		return true
+	}
+	// 169.254.169.254 (AWS/GCP/Azure/OpenStack metadata) and its IPv6 form.
+	if ip := net.ParseIP(h); ip != nil && (ip.String() == "169.254.169.254" || ip.String() == "fd00:ec2::254") {
+		return true
+	}
+	return false
+}
 
 func (h *BookmarkHandler) GetBookmarks(c *gin.Context) {
 	isAuth, _ := c.Get("is_authenticated")
@@ -581,6 +617,28 @@ func (h *BookmarkHandler) FetchFavicon(c *gin.Context) {
 		scheme = "http"
 	}
 
+	// SSRF guard.
+	// This endpoint makes the server fetch an attacker-supplied URL. It is only
+	// needed by the bookmark editor (admin), while bookmark URLs legitimately
+	// point at LAN hosts. So: guests may only probe public hosts, admins may
+	// probe LAN hosts too, and link-local / metadata targets stay blocked for
+	// everyone.
+	isAuth, _ := c.Get("is_authenticated")
+	isAuthenticated, _ := isAuth.(bool)
+	if !isAuthenticated && isInternalHost(hostname) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "未登录状态下不允许抓取内网地址的图标",
+			"code":  http.StatusForbidden,
+		})
+		return
+	}
+	if isBlockedTargetHost(hostname) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "不允许访问该地址",
+			"code":  http.StatusForbidden,
+		})
+		return
+	}
 	// Smart keyword mapping to popular Tabler icons
 	lowerURL := strings.ToLower(rawURL)
 	suggestedIcon := "tabler:world"

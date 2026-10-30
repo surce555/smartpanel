@@ -155,6 +155,5 @@ func readLinuxUptime() uint64 {
 }
 
 func readLinuxDisk(path string) (total uint64, used uint64) {
-	// Fallback estimate for container root disk if statfs is not directly imported
-	return 100 * 1024 * 1024 * 1024, 25 * 1024 * 1024 * 1024
+	return platformDiskUsage(path)
 }

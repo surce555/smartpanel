@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -43,10 +44,16 @@ func (h *HealthHandler) CheckBookmarkHealth(c *gin.Context) {
 }
 
 func (h *HealthHandler) CheckAllHealth(c *gin.Context) {
+	results := RunAllHealthChecks()
+	c.JSON(http.StatusOK, results)
+}
+
+// RunAllHealthChecks probes every bookmark that has a usable URL and persists
+// the result. It is shared by the HTTP handler and the background scheduler.
+func RunAllHealthChecks() []models.HealthCheck {
 	rows, err := database.DB.Query("SELECT id, url_internal, url_fallback, url_public_template FROM bookmarks")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询书签失败", "code": http.StatusInternalServerError})
-		return
+		return []models.HealthCheck{}
 	}
 	defer rows.Close()
 
@@ -72,25 +79,50 @@ func (h *HealthHandler) CheckAllHealth(c *gin.Context) {
 		}
 	}
 
-	results := make([]models.HealthCheck, len(tasks))
+	results := make([]models.HealthCheck, 0, len(tasks))
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8) // Limit to 8 concurrent probes
 
-	for i, t := range tasks {
+	for _, t := range tasks {
 		wg.Add(1)
-		go func(idx int, tk task) {
+		go func(tk task) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			res := probeURL(tk.id, tk.url)
 			saveHealthCheck(res)
-			results[idx] = res
-		}(i, t)
+			mu.Lock()
+			results = append(results, res)
+			mu.Unlock()
+		}(t)
 	}
 
 	wg.Wait()
-	c.JSON(http.StatusOK, results)
+	return results
+}
+
+// StartHealthScheduler runs a health sweep immediately and then on a fixed
+// interval, so the dashboard indicators actually reflect reality. Previously
+// nothing ever called the health endpoints and every card showed "未检测".
+func StartHealthScheduler(interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * time.Minute
+	}
+	go func() {
+		// Small delay so startup is not competing with the initial DDNS probe.
+		time.Sleep(20 * time.Second)
+		results := RunAllHealthChecks()
+		log.Printf("[health] initial sweep done: %d bookmarks probed", len(results))
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			results := RunAllHealthChecks()
+			log.Printf("[health] periodic sweep done: %d bookmarks probed", len(results))
+		}
+	}()
 }
 
 func probeURL(bookmarkID, targetURL string) models.HealthCheck {
@@ -132,7 +164,7 @@ func probeURL(bookmarkID, targetURL string) models.HealthCheck {
 
 func saveHealthCheck(hc models.HealthCheck) {
 	checkID := uuid.New().String()
-	_, _ = database.DB.Exec(`
+	_, err := database.DB.Exec(`
 		INSERT INTO health_checks (id, bookmark_id, status, last_checked, response_time_ms)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(bookmark_id) DO UPDATE SET 
@@ -140,4 +172,9 @@ func saveHealthCheck(hc models.HealthCheck) {
 			last_checked = excluded.last_checked, 
 			response_time_ms = excluded.response_time_ms
 	`, checkID, hc.BookmarkID, hc.Status, hc.LastChecked, hc.ResponseTimeMS)
+	if err != nil {
+		// Never swallow this: a broken upsert silently disabled every health
+		// indicator on the dashboard (the ON CONFLICT target had no unique index).
+		log.Printf("[health] failed to persist health check for bookmark %s: %v", hc.BookmarkID, err)
+	}
 }

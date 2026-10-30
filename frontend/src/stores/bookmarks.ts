@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useSettingsStore, NetworkInfo } from './settings'
-import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isIPv6Host, isLanEntry } from '@/composables/useIPv6Probe'
 
 export interface Tag {
   id: string
@@ -53,7 +53,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   const draggingBookmarkId = ref<string | null>(null)
 
   const settingsStore = useSettingsStore()
-  const { isIPv6Available, isLanAvailable, routePreference } = useIPv6Probe()
+  const { isIPv6Available, routePreference } = useIPv6Probe()
 
   function getInternalUrl(b: Bookmark): string {
     return b.url_internal ? b.url_internal.trim() : ''
@@ -87,11 +87,21 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   }
 
   /**
-   * Resolve final URL for a bookmark dynamically based on network state
-   * Priority hierarchy:
-   * 1. 内网直连 (url_internal)
-   * 2. IPv6 直连 (url_public_template)
-   * 3. 域名代理回退 (url_fallback)
+   * Whether the current page is genuinely being visited through a LAN address
+   * (private IPv4 / localhost / *.local / *.lan / configured lan_domain).
+   * See `isLanEntry` for why reachability signals must not be used here.
+   */
+  function isAccessingViaLanEntry(): boolean {
+    return isLanEntry(window.location.hostname, settingsStore.networkInfo.lan_domain)
+  }
+
+  /**
+   * Resolve final URL for a bookmark dynamically based on the current entry point
+   *
+   * Auto priority hierarchy:
+   * 1. 通过内网地址 / 内网域名访问 -> 内网直连 (url_internal)
+   * 2. 通过 IPv6 地址访问         -> IPv6 直连 (url_public_template)
+   * 3. 通过公网域名访问           -> IPv6 可用则直连, 否则域名回退 (url_fallback)
    */
   function resolveBookmarkUrl(b: Bookmark): string {
     const net = settingsStore.networkInfo
@@ -100,7 +110,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     const v6Url = getV6Url(b, net)
     const fallbackUrl = getFallbackUrl(b, net)
 
-    // 1. Explicit preference overrides
+    // 1. Explicit preference overrides (user forced a mode via the route badge)
     if (pref === 'lan') {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
@@ -111,33 +121,36 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       return fallbackUrl || v6Url || internalUrl || '#'
     }
 
-    // 2. Auto Routing (智能优选: 内网 ➔ IPv6 ➔ 域名)
+    // 2. Auto Routing
     const hostname = window.location.hostname
-    const inLan =
-      isLanHost(hostname) ||
-      net.is_client_lan === true ||
-      isLanAvailable.value === true ||
-      (Boolean(net.lan_domain) && (hostname === net.lan_domain || hostname.endsWith(`.${net.lan_domain}`)))
 
-    // (a) Client is in LAN (even when accessing via domain): ALWAYS prioritize internal LAN URL!
-    if (inLan) {
+    // (a) Opened through the LAN entry (private IP / *.lan / lan_domain).
+    //     The browser proved it can reach the NAS internally, so prefer it.
+    if (isAccessingViaLanEntry()) {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
 
-    // (b) Visiting via IPv6 host: prioritize IPv6 template
+    // (b) Opened through a bare IPv6 address: the client is IPv6-capable.
     if (isIPv6Host(hostname)) {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
-    // (c) Visiting via Domain outside LAN:
-    // Prioritize IPv6 if available; fallback to domain proxy; finally fallback to internal
+    // (c) Opened through the public domain: IPv6 dual-stack direct first,
+    //     then the Cloudflare Tunnel fallback.
+    //     `isIPv6Available === false` means an active probe proved IPv6 is dead.
+    //     `null` only means "not probed yet / inconclusive" — in that case still
+    //     prefer IPv6, because a failed <img> probe on a public domain is usually
+    //     mixed-content blocking, not proof that the NAS lacks IPv6.
     if (isIPv6Available.value !== false && v6Url) {
       return v6Url
     }
     if (fallbackUrl) {
       return fallbackUrl
     }
-    return internalUrl || v6Url || '#'
+    if (v6Url) {
+      return v6Url
+    }
+    return internalUrl || '#'
   }
 
   // Filtered bookmarks

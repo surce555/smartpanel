@@ -16,27 +16,34 @@ const emit = defineEmits<{
 const bookmarksStore = useBookmarksStore()
 const settingsStore = useSettingsStore()
 
+// Tailwind only emits utilities it can find as complete literal class names while
+// scanning the source. Interpolating like `sm:${'grid-cols-3'}` produces
+// `sm:grid-cols-3` at runtime but Tailwind never sees it, so every sm:/lg:
+// column setting was silently dropped. Keep the full class strings literal here.
+const MOBILE_COLS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+}
+
+const TABLET_COLS: Record<number, string> = {
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-3',
+  4: 'sm:grid-cols-4',
+}
+
+const DESKTOP_COLS: Record<number, string> = {
+  4: 'lg:grid-cols-4',
+  5: 'lg:grid-cols-5',
+  6: 'lg:grid-cols-6',
+  7: 'lg:grid-cols-7',
+  8: 'lg:grid-cols-8',
+}
+
 const gridClass = computed(() => {
-  const desktopCols = settingsStore.gridColsDesktop || 6
-  const tabletCols = settingsStore.gridColsTablet || 3
-  const mobileCols = settingsStore.gridColsMobile || 2
-
-  const colClasses: Record<number, string> = {
-    1: 'grid-cols-1',
-    2: 'grid-cols-2',
-    3: 'grid-cols-3',
-    4: 'grid-cols-4',
-    5: 'grid-cols-5',
-    6: 'grid-cols-6',
-    7: 'grid-cols-7',
-    8: 'grid-cols-8',
-  }
-
-  const mClass = colClasses[mobileCols] || 'grid-cols-2'
-  const tClass = `sm:${colClasses[tabletCols] || 'grid-cols-3'}`
-  const dClass = `lg:${colClasses[desktopCols] || 'grid-cols-6'}`
-
-  return `${mClass} ${tClass} ${dClass}`
+  const mobile = MOBILE_COLS[settingsStore.gridColsMobile] || MOBILE_COLS[2]
+  const tablet = TABLET_COLS[settingsStore.gridColsTablet] || TABLET_COLS[3]
+  const desktop = DESKTOP_COLS[settingsStore.gridColsDesktop] || DESKTOP_COLS[6]
+  return `${mobile} ${tablet} ${desktop}`
 })
 
 async function handleGridDrop(e: DragEvent) {

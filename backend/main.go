@@ -30,6 +30,9 @@ func main() {
 
 	services.InitDDNSService()
 
+	// Background bookmark health sweep so card indicators reflect reality.
+	handlers.StartHealthScheduler(2 * time.Minute)
+
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	_ = r.SetTrustedProxies(nil)
@@ -77,16 +80,19 @@ func main() {
 		api.GET("/settings/theme", settingsH.GetThemeSettings)
 		api.GET("/system/network", networkH.GetNetworkInfo)
 		api.GET("/system/network/stream", networkH.StreamNetworkUpdates)
-		api.GET("/health/all", healthH.CheckAllHealth)
-		api.GET("/health/check/:bookmarkId", healthH.CheckBookmarkHealth)
-		api.GET("/bookmarks/fetch-favicon", bookmarkH.FetchFavicon)
+		api.GET("/health/check/:bookmarkId", middleware.OptionalAuthMiddleware(), healthH.CheckBookmarkHealth)
+		// OptionalAuth so the handler can decide whether guest access is allowed;
+		// it is no longer an unauthenticated "fetch any URL for me" endpoint.
+		api.GET("/bookmarks/fetch-favicon", middleware.OptionalAuthMiddleware(), bookmarkH.FetchFavicon)
 		api.GET("/memo", memoH.GetMemo)
-		api.PUT("/memo", memoH.UpdateMemo)
 
 		// Protected Admin Routes
 		admin := api.Group("")
 		admin.Use(middleware.AuthMiddleware())
 		{
+			// Health checks that fan out across every bookmark stay admin-only.
+			admin.GET("/health/all", healthH.CheckAllHealth)
+
 			// Groups management
 			admin.POST("/groups", groupH.CreateGroup)
 			admin.PUT("/groups/:id", groupH.UpdateGroup)
@@ -128,6 +134,9 @@ func main() {
 			// Backup & Restore
 			admin.POST("/backup/export", backupH.ExportBackup)
 			admin.POST("/backup/import", backupH.ImportBackup)
+
+			// Quick memo write is owner-only (guests keep read access)
+			admin.PUT("/memo", memoH.UpdateMemo)
 		}
 	}
 

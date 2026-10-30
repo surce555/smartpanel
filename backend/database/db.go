@@ -110,7 +110,40 @@ func createTables() error {
 	`
 
 	_, err := DB.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// health_checks is written with `ON CONFLICT(bookmark_id) DO UPDATE`, which
+	// SQLite rejects unless bookmark_id carries a UNIQUE constraint. Older
+	// databases were created without it, so add the index on the existing table
+	// (deduplicating first, otherwise UNIQUE index creation fails).
+	if err := ensureHealthCheckUniqueIndex(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ensureHealthCheckUniqueIndex guarantees at most one health row per bookmark.
+// The upsert in saveHealthCheck depends on it.
+func ensureHealthCheckUniqueIndex() error {
+	if _, err := DB.Exec(`
+		DELETE FROM health_checks
+		WHERE rowid NOT IN (
+			SELECT MAX(rowid) FROM health_checks GROUP BY bookmark_id
+		) AND bookmark_id IS NOT NULL
+	`); err != nil {
+		log.Printf("Warning cleaning duplicate health_checks: %v", err)
+	}
+
+	if _, err := DB.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_health_checks_bookmark_id
+		ON health_checks(bookmark_id)
+	`); err != nil {
+		return fmt.Errorf("failed to create unique index on health_checks(bookmark_id): %w", err)
+	}
+	return nil
 }
 
 func seedDefaultData() error {

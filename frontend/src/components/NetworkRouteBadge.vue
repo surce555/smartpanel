@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isIPv6Host, isLanEntry } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
-const { isIPv6Available, isLanAvailable, routePreference, setRoutePreference, probeIPv6 } = useIPv6Probe()
+const { isIPv6Available, routePreference, setRoutePreference } = useIPv6Probe()
 const settingsStore = useSettingsStore()
 
 const showMenu = ref(false)
@@ -14,24 +14,20 @@ const currentActiveMode = computed(() => {
     return routePreference.value
   }
 
-  // Auto evaluation:
-  const net = settingsStore.networkInfo
-  const inLan =
-    isLanHost(window.location.hostname) ||
-    net.is_client_lan === true ||
-    isLanAvailable.value === true ||
-    (Boolean(net.lan_domain) && (window.location.hostname === net.lan_domain || window.location.hostname.endsWith(`.${net.lan_domain}`)))
+  // Auto evaluation — must mirror `resolveBookmarkUrl` exactly, otherwise the
+  // badge would claim "内网直连" while the cards actually open the IPv6 URL.
+  const hostname = window.location.hostname
 
-  if (inLan) {
+  if (isLanEntry(hostname, settingsStore.networkInfo.lan_domain)) {
     return 'lan'
   }
-  if (isIPv6Host(window.location.hostname) || isIPv6Available.value === true) {
+  if (isIPv6Host(hostname)) {
     return 'ipv6'
   }
   if (isIPv6Available.value === false) {
     return 'domain'
   }
-  return 'probing'
+  return 'ipv6'
 })
 
 const badgeConfig = computed(() => {
@@ -66,16 +62,15 @@ const badgeConfig = computed(() => {
         icon: 'tabler:world',
         desc: '当前走 Cloudflare 域名代理回源通道',
       }
-    case 'probing':
     default:
       return {
-        label: '探测中...',
-        dotColor: 'bg-slate-400 animate-pulse',
-        textColor: 'text-slate-500 dark:text-slate-400',
-        bgColor: 'bg-slate-100 dark:bg-slate-800',
-        borderColor: 'border-slate-200 dark:border-slate-700',
-        icon: 'tabler:loader',
-        desc: '正在智能探测您的网络环境',
+        label: routePreference.value === 'auto' ? 'IPv6 直连' : '强制 IPv6',
+        dotColor: 'bg-emerald-500',
+        textColor: 'text-emerald-700 dark:text-emerald-300',
+        bgColor: 'bg-emerald-100/80 dark:bg-emerald-950/60',
+        borderColor: 'border-emerald-200 dark:border-emerald-800',
+        icon: 'tabler:bolt',
+        desc: '当前通过公网 IPv6 高速直连 NAS',
       }
   }
 })
