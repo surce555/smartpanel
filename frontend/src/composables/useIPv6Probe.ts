@@ -9,6 +9,11 @@ const isProbing = ref<boolean>(false)
  * protocol reached the NAS, so it cannot be used as IPv6 proof.
  */
 const isProxiedClient = ref<boolean>(false)
+/**
+ * Human-readable trace of the last IPv6 probe. Surfaced in the route badge menu
+ * so a mis-routed client can be diagnosed from the UI instead of guessing.
+ */
+const lastProbeDetail = ref<string>('')
 const routePreference = ref<'auto' | 'lan' | 'ipv6' | 'domain'>(
   (localStorage.getItem('smartpanel_route_preference') as any) || 'auto'
 )
@@ -64,12 +69,16 @@ export function isLanEntry(hostname: string, lanDomain?: string): boolean {
 /**
  * Cached IPv6 probe result.
  *
- * Stored as `<0|1>:<epoch-ms>` so the answer expires. A bare boolean kept for
- * the entire session meant a laptop that probed on Wi-Fi kept using that result
- * after switching to an IPv4-only mobile hotspot, silently breaking routing.
+ * Stored as `<0|1>:<epoch-ms>`. A bare boolean kept for the whole session meant
+ * a laptop that probed on Wi-Fi kept that answer after switching to an IPv4-only
+ * hotspot, silently breaking routing.
+ *
+ * A NEGATIVE result expires quickly: it is the harmful answer, and one transient
+ * timeout must not pin the client to the domain fallback for minutes.
  */
 const IPV6_CACHE_KEY = 'smartpanel_ipv6_probe'
-const IPV6_CACHE_TTL_MS = 5 * 60 * 1000
+const IPV6_CACHE_TTL_POSITIVE_MS = 5 * 60 * 1000
+const IPV6_CACHE_TTL_NEGATIVE_MS = 30 * 1000
 
 function readIPv6Cache(): boolean | null {
   try {
@@ -78,7 +87,9 @@ function readIPv6Cache(): boolean | null {
     const [flag, tsRaw] = raw.split(':')
     if (flag !== '0' && flag !== '1') return null
     const ts = Number(tsRaw)
-    if (!Number.isFinite(ts) || Date.now() - ts > IPV6_CACHE_TTL_MS) {
+    if (!Number.isFinite(ts)) return null
+    const ttl = flag === '1' ? IPV6_CACHE_TTL_POSITIVE_MS : IPV6_CACHE_TTL_NEGATIVE_MS
+    if (Date.now() - ts > ttl) {
       sessionStorage.removeItem(IPV6_CACHE_KEY)
       return null
     }
@@ -94,6 +105,61 @@ function writeIPv6Cache(available: boolean) {
   } catch {
     // sessionStorage may be unavailable (private mode / quota); probing still works.
   }
+}
+
+/**
+ * Build the probe URL for the user's IPv6 direct-connect host.
+ *
+ * Accepted inputs (as stored by the admin UI / bookmark templates):
+ *   v6.example.com
+ *   v6.example.com:5666
+ *   https://v6.example.com:5666
+ *   [2408:8214::1]:5666          (bare IPv6 literal with port)
+ *   2408:8214::1
+ *
+ * The port must survive: bookmark templates point at `v6.example.com:5666`, and
+ * forcing a bare `https://host` (implicit 443) probed a port nothing listens on,
+ * which read as "IPv6 unavailable" and downgraded the client to the CF domain.
+ */
+export function buildV6ProbeUrl(v6domain?: string, fallbackPort?: string): string {
+  let raw = (v6domain || '').trim()
+  if (!raw) return ''
+
+  let scheme = 'https://'
+  if (/^http:\/\//i.test(raw)) {
+    scheme = 'http://'
+    raw = raw.replace(/^http:\/\//i, '')
+  } else if (/^https:\/\//i.test(raw)) {
+    raw = raw.replace(/^https:\/\//i, '')
+  }
+
+  // Drop any path/query; only the authority matters for a reachability probe.
+  raw = raw.split('/')[0]
+
+  const port = (fallbackPort || '').trim()
+  const isBracketedV6 = raw.startsWith('[')
+
+  if (isBracketedV6) {
+    // Already bracketed: `[addr]` or `[addr]:port`.
+    if (/^\[[^\]]+\]:\d+$/.test(raw)) return `${scheme}${raw}`
+    if (port) return `${scheme}${raw}:${port}`
+    return `${scheme}${raw}`
+  }
+
+  const colonCount = (raw.match(/:/g) || []).length
+  const isBareV6 = colonCount > 1
+
+  if (isBareV6) {
+    // A bare IPv6 literal cannot be told apart from `host:port` by colon count
+    // alone, so it must always be bracketed. The port goes OUTSIDE the brackets:
+    //   https://[2408:8214::1]:5666   (correct)
+    //   https://[2408:8214::1:5666]   (invalid - port swallowed into the literal)
+    return port ? `${scheme}[${raw}]:${port}` : `${scheme}[${raw}]`
+  }
+
+  const hasPort = /:\d+$/.test(raw)
+  if (!hasPort && port) return `${scheme}${raw}:${port}`
+  return `${scheme}${raw}`
 }
 
 export function useIPv6Probe() {
@@ -143,32 +209,40 @@ export function useIPv6Probe() {
   }
 
   /**
-   * @param opts.clientIP       backend-reported client IP for this request
-   * @param opts.directIPv6     backend proved the page arrived over a direct
-   *                            (non-Cloudflare) IPv6 connection
-   * @param opts.v6domain       the user's own IPv6-only host (e.g. v6.example.com)
-   * @param opts.probeSelfUrl   same-origin URL to probe when nothing better exists
-   * @param opts.force          ignore the cache and re-probe (network change)
+   * Probe IPv6 dual-stack reachability.
    *
-   * Evidence is ranked, strongest first. Only the active external probe can
-   * return "unavailable" — every other source is positive proof.
+   * @param opts.v6domain    the user's IPv6 direct-connect host, exactly as it
+   *                         appears in bookmark templates (may include a port,
+   *                         e.g. `v6.example.com:5666`)
+   * @param opts.v6port      fallback port when `v6domain` has none
+   * @param opts.directIPv6  backend proved this page arrived over direct IPv6
+   * @param opts.viaCloudflare request came through the Cloudflare edge
    *
-   *   1. `direct_ipv6` from the backend: this very page was served over a direct
-   *      IPv6 connection, so the client demonstrably has IPv6.
-   *   2. Page opened via a bare IPv6 host.
-   *   3. Probe the user's own v6domain — the exact host the cards link to, so a
-   *      success here is the most relevant possible signal.
-   *   4. Probe public IPv6-only endpoints. These are frequently blocked or slow
-   *      on mainland networks, so a failure here is the *weakest* evidence.
+   * Evidence is ranked, strongest first. Only an active probe may report
+   * "unavailable".
+   *
+   *   1. backend `direct_ipv6`  -> this page was served over direct IPv6.
+   *   2. page opened via a bare IPv6 host.
+   *   3. probe the user's own v6domain. This is the single most relevant test:
+   *      it is the exact host the cards will link to, it proves the client can
+   *      reach the NAS over IPv6, and it does not depend on any external
+   *      third-party endpoint being reachable.
+   *   4. probe public IPv6-only endpoints (weakest: often blocked in CN).
+   *
+   * When `v6domain` is configured we deliberately IGNORE a public-endpoint
+   * failure. Being unable to reach `6.ipw.cn` says nothing about whether the
+   * client can reach the user's own NAS; earlier versions conflated the two and
+   * downgraded working IPv6 clients to the Cloudflare domain.
    */
   async function probeIPv6(
     customProbeUrl?: string,
-    timeoutMs: number = 1500,
+    timeoutMs: number = 2000,
     opts: {
       clientIP?: string
       directIPv6?: boolean
       viaCloudflare?: boolean
       v6domain?: string
+      v6port?: string
       probeSelfUrl?: string
       force?: boolean
     } = {}
@@ -177,65 +251,76 @@ export function useIPv6Probe() {
 
     // 1. Backend proved this page arrived over direct IPv6.
     if (opts.directIPv6) {
-      isIPv6Available.value = true
-      writeIPv6Cache(true)
-      return true
+      lastProbeDetail.value = '后端已确认本次页面经由 IPv6 直连'
+      return setIPv6Result(true)
     }
 
     // 2. Page opened through a bare IPv6 host: IPv6 is proven.
     if (isIPv6Host(window.location.hostname)) {
-      isIPv6Available.value = true
-      writeIPv6Cache(true)
-      return true
+      lastProbeDetail.value = '当前页面本身即通过 IPv6 地址访问'
+      return setIPv6Result(true)
     }
 
-    // 3. Direct (non-proxied) connection whose peer address is IPv6.
-    //    `directIPv6` already covers this, but some deployments hide RemoteAddr;
-    //    treat a non-proxied IPv6 client_ip as equivalent proof.
-    if (!opts.v6domain && !opts.probeSelfUrl && isIPv6Address(opts.clientIP) && !isProxiedClient.value) {
-      isIPv6Available.value = true
-      writeIPv6Cache(true)
-      return true
-    }
-
-    // 4. Reuse a recent probe result (5 min TTL, reset on network change).
+    // 3. Reuse a recent probe result (negative results expire in 30s).
     if (!opts.force) {
       const cached = readIPv6Cache()
       if (cached !== null) {
         isIPv6Available.value = cached
+        lastProbeDetail.value = `使用缓存结果: ${cached ? 'IPv6 可用' : 'IPv6 不可用'}`
         return cached
       }
     }
 
     isProbing.value = true
-
-    // Ordered by usefulness: the user's own v6 host first, then generic probes.
-    const endpoints: string[] = []
-    if (opts.v6domain) {
-      endpoints.push(`https://${opts.v6domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`)
-    }
-    if (customProbeUrl) endpoints.push(customProbeUrl)
-    if (opts.probeSelfUrl) endpoints.push(opts.probeSelfUrl)
-    endpoints.push('https://6.ipw.cn', 'https://speed.neu6.edu.cn')
-
     try {
-      // Race them in parallel: one success is enough, and this is faster than
-      // walking the list one by one.
+      // Build the v6 target from the configured domain. Bookmark templates store
+      // it as `host:port`, so a forced `https://host` (dropping the port) would
+      // always fail and report "IPv6 unavailable".
+      const v6Url = buildV6ProbeUrl(opts.v6domain, opts.v6port)
+      const parts: string[] = []
+
+      // 3. Probe the user's own IPv6 endpoint first — most relevant evidence.
+      if (v6Url) {
+        const v6Reachable = await probeSingleIPv6Endpoint(v6Url, timeoutMs)
+        parts.push(`v6 探测 ${v6Url} -> ${v6Reachable ? '可达' : '不可达'}`)
+        if (v6Reachable) {
+          lastProbeDetail.value = parts.join('; ')
+          return setIPv6Result(true)
+        }
+        // The user's own v6 host did not answer. Still fall through to the
+        // generic probes: a failure here can be a certificate/port problem
+        // rather than a missing IPv6 stack.
+      } else {
+        parts.push('未配置 IPv6 直连域名，跳过自测')
+      }
+
+      const endpoints: string[] = []
+      if (customProbeUrl) endpoints.push(customProbeUrl)
+      if (opts.probeSelfUrl) endpoints.push(opts.probeSelfUrl)
+      endpoints.push('https://6.ipw.cn', 'https://speed.neu6.edu.cn')
+
       const results = await Promise.all(
         endpoints.map((url) => probeSingleIPv6Endpoint(url, timeoutMs))
       )
       const available = results.some(Boolean)
+      parts.push(`公网探测 ${available ? '可达' : '全部不可达'}`)
+      lastProbeDetail.value = parts.join('; ')
 
-      isIPv6Available.value = available
-      writeIPv6Cache(available)
-      return available
+      // A configured-but-unreachable v6domain combined with unreachable public
+      // probes means IPv6 genuinely is not usable from this client.
+      return setIPv6Result(available)
     } catch {
-      isIPv6Available.value = false
-      writeIPv6Cache(false)
-      return false
+      lastProbeDetail.value = (lastProbeDetail.value || '') + '; 探测异常'
+      return setIPv6Result(false)
     } finally {
       isProbing.value = false
     }
+  }
+
+  function setIPv6Result(available: boolean): boolean {
+    isIPv6Available.value = available
+    writeIPv6Cache(available)
+    return available
   }
 
   /**
@@ -291,6 +376,7 @@ export function useIPv6Probe() {
     isLanAvailable,
     isProbing,
     isProxiedClient,
+    lastProbeDetail,
     routePreference,
     setRoutePreference,
     probeIPv6,

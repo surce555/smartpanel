@@ -57,16 +57,18 @@ onMounted(async () => {
 
   // IPv6 routing decision. Ordering: LAN > IPv6 > CF domain.
   //
-  // The backend reports `direct_ipv6` when this very page was served over a
-  // direct IPv6 connection — that is positive proof the client has IPv6 and
-  // outranks any external probe, which is often blocked on mainland networks
-  // and used to downgrade working IPv6 clients to the CF domain.
+  // Behind the Cloudflare edge the backend cannot prove direct IPv6 reachability,
+  // so the decisive test is whether the client can actually reach the configured
+  // IPv6 direct-connect host (v6domain:port) — that is the exact host the cards
+  // link to. Public endpoints like 6.ipw.cn are only a last resort because they
+  // are often blocked on mainland networks.
   const net = settingsStore.networkInfo
   probeIPv6(undefined, undefined, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     viaCloudflare: net.via_cloudflare,
     v6domain: net.v6domain,
+    v6port: net.server_port,
   })
   probeLanConnectivity(net.host_lan_ips, net.server_port)
   // Check auth

@@ -4,7 +4,7 @@ import { Icon } from '@iconify/vue'
 import { useIPv6Probe, isIPv6Host, isLanEntry } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
-const { isIPv6Available, routePreference, setRoutePreference } = useIPv6Probe()
+const { isIPv6Available, lastProbeDetail, routePreference, setRoutePreference } = useIPv6Probe()
 const settingsStore = useSettingsStore()
 
 const showMenu = ref(false)
@@ -144,6 +144,18 @@ onUnmounted(() => {
       <div class="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
         <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">网络分流优先级</div>
         <div class="text-[10px] text-slate-400">决定点击书签卡片时优先跳转的连接模式</div>
+      </div>
+
+      <!-- Live diagnosis: shows what the IPv6 probe actually observed, so a
+           mis-routed client can be debugged from the UI. -->
+      <div
+        v-if="lastProbeDetail"
+        class="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
+      >
+        <div class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5">IPv6 探测结果</div>
+        <div class="text-[10px] leading-relaxed text-slate-600 dark:text-slate-300 break-all font-mono">
+          {{ lastProbeDetail }}
+        </div>
       </div>
 
       <button
