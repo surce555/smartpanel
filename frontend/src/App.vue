@@ -68,6 +68,8 @@ onMounted(async () => {
     directIPv6: net.direct_ipv6,
     viaCloudflare: net.via_cloudflare,
     v6domain: net.v6domain,
+    // `{ipv6}` templates use the NAS's detected address; probe that form too.
+    currentIPv6: net.current_ipv6 || net.detected_host_ipv6,
     v6port: net.server_port,
   })
   probeLanConnectivity(net.host_lan_ips, net.server_port)

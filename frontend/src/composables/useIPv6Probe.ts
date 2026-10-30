@@ -243,6 +243,7 @@ export function useIPv6Probe() {
       viaCloudflare?: boolean
       v6domain?: string
       v6port?: string
+      currentIPv6?: string
       probeSelfUrl?: string
       force?: boolean
     } = {}
@@ -273,25 +274,34 @@ export function useIPv6Probe() {
 
     isProbing.value = true
     try {
-      // Build the v6 target from the configured domain. Bookmark templates store
-      // it as `host:port`, so a forced `https://host` (dropping the port) would
-      // always fail and report "IPv6 unavailable".
-      const v6Url = buildV6ProbeUrl(opts.v6domain, opts.v6port)
+      // Build the v6 targets. Bookmark templates can use either `{v6domain}`
+      // (`v6.example.com:5666`) or `{ipv6}` (`[2408:...]:5666`), so both are
+      // probed: whichever form the user's cards actually use is the one that
+      // matters.
+      const candidates: string[] = []
+      const v6ByDomain = buildV6ProbeUrl(opts.v6domain, opts.v6port)
+      if (v6ByDomain) candidates.push(v6ByDomain)
+      const v6ByAddress = buildV6ProbeUrl(opts.currentIPv6, opts.v6port)
+      if (v6ByAddress && !candidates.includes(v6ByAddress)) candidates.push(v6ByAddress)
+
       const parts: string[] = []
 
-      // 3. Probe the user's own IPv6 endpoint first — most relevant evidence.
-      if (v6Url) {
-        const v6Reachable = await probeSingleIPv6Endpoint(v6Url, timeoutMs)
-        parts.push(`v6 探测 ${v6Url} -> ${v6Reachable ? '可达' : '不可达'}`)
-        if (v6Reachable) {
+      // 3. Probe the user's own IPv6 endpoints first — most relevant evidence.
+      if (candidates.length > 0) {
+        const reachable = await Promise.all(
+          candidates.map(async (url) => ({ url, ok: await probeSingleIPv6Endpoint(url, timeoutMs) }))
+        )
+        for (const r of reachable) {
+          parts.push(`${r.url} -> ${r.ok ? '可达' : '不可达'}`)
+        }
+        if (reachable.some((r) => r.ok)) {
           lastProbeDetail.value = parts.join('; ')
           return setIPv6Result(true)
         }
-        // The user's own v6 host did not answer. Still fall through to the
-        // generic probes: a failure here can be a certificate/port problem
-        // rather than a missing IPv6 stack.
+        // None answered. Fall through to the generic probes: a failure here can
+        // be a certificate/hostname problem rather than a missing IPv6 stack.
       } else {
-        parts.push('未配置 IPv6 直连域名，跳过自测')
+        parts.push('未配置 IPv6 直连域名/地址，跳过自测')
       }
 
       const endpoints: string[] = []
