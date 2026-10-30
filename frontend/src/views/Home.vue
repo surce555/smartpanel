@@ -192,30 +192,23 @@ onMounted(async () => {
     theme.injectCustomJS(settingsStore.customJs)
   }
   await bookmarksStore.fetchAll()
-  await probeIPv6FromTemplates()
+  await probeClientIPv6()
 })
 
 /**
- * Probe IPv6 using the scheme/port from the bookmarks' real URL templates.
+ * Decide whether THIS CLIENT can use IPv6, after bookmarks are loaded.
  *
- * The NAS IPv6 address changes on every boot, so neither the address nor the
- * probe URL can be hardcoded: the template (`http://[{ipv6}]:5666`) is the
- * source of truth for scheme, host form and port. Runs after bookmarks load so
- * the profile matches what the cards actually link to.
+ * The probe tests the viewer's own connectivity (literal IPv6 targets), NOT the
+ * NAS. Whether the NAS has IPv6 comes from the backend (`direct_ipv6`, or the
+ * `{ipv6}` address it detected), which is a separate signal.
  */
-async function probeIPv6FromTemplates() {
+async function probeClientIPv6() {
   const net = settingsStore.networkInfo
-  const { scheme, port } = bookmarksStore.deriveIPv6ProbeParams()
   await probeIPv6(undefined, undefined, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     viaCloudflare: net.via_cloudflare,
-    v6domain: net.v6domain,
-    currentIPv6: net.current_ipv6 || net.detected_host_ipv6,
-    v6port: port,
-    scheme,
-    // Re-probe here even if App.vue already cached a negative result from
-    // before the templates were known.
+    // Re-probe here regardless of any earlier answer from App.vue.
     force: true,
   })
 }

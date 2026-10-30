@@ -55,18 +55,13 @@ onMounted(async () => {
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
 
-  // Preliminary IPv6 decision for the first paint. A definitive probe runs from
-  // Home.vue once the bookmark templates are loaded, because those carry the
-  // real scheme/port (`http://[{ipv6}]:5666`); the IPv6 address itself changes on
-  // every NAS boot, so it always comes from the backend, never from a constant.
+  // Decide whether THIS CLIENT can use IPv6. A second pass runs from Home.vue
+  // once bookmarks are loaded; this one gets the badge right on first paint.
   const net = settingsStore.networkInfo
   probeIPv6(undefined, undefined, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     viaCloudflare: net.via_cloudflare,
-    v6domain: net.v6domain,
-    currentIPv6: net.current_ipv6 || net.detected_host_ipv6,
-    v6port: net.server_port,
   })
   probeLanConnectivity(net.host_lan_ips, net.server_port)
   // Check auth
