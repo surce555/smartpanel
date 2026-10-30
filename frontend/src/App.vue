@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const settingsStore = useSettingsStore()
 const { initTheme } = useTheme()
-const { probeIPv6 } = useIPv6Probe()
+const { probeIPv6, probeLanConnectivity } = useIPv6Probe()
 const authStore = useAuthStore()
 
 const isLoginRoute = computed(() => route.name === 'Login')
@@ -54,8 +54,18 @@ onMounted(async () => {
   await settingsStore.fetchSettings()
   await settingsStore.fetchNetworkInfo()
   settingsStore.setupSSE()
-  // Probe IPv6 in background
-  probeIPv6()
+
+  const net = settingsStore.networkInfo
+  // Probe with network information
+  probeIPv6(undefined, 2500, {
+    clientIP: net.client_ip,
+    directIPv6: net.direct_ipv6,
+    clientHasIPv6: net.client_has_ipv6,
+    viaCloudflare: net.via_cloudflare,
+    v6domain: net.v6domain,
+  })
+  probeLanConnectivity(net.host_lan_ips, net.server_port)
+
   // Check auth
   authStore.fetchMe()
 })

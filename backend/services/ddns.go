@@ -28,6 +28,7 @@ type DDNSService struct {
 var (
 	DDNS                   *DDNSService
 	lastCapturedServerIPv6 string
+	lastCapturedServerIPv4 string
 	serverIPMu             sync.RWMutex
 )
 
@@ -42,6 +43,7 @@ func InitDDNSService() *DDNSService {
 
 	// Trigger immediate check on application startup
 	DDNS.TriggerCheck()
+	go FetchPublicIPv4()
 
 	return DDNS
 }
@@ -67,6 +69,47 @@ func GetCapturedServerIPv6() string {
 	serverIPMu.RLock()
 	defer serverIPMu.RUnlock()
 	return lastCapturedServerIPv6
+}
+
+func GetCapturedServerIPv4() string {
+	serverIPMu.RLock()
+	defer serverIPMu.RUnlock()
+	return lastCapturedServerIPv4
+}
+
+// FetchPublicIPv4 probes external endpoints to get public IPv4 address of the NAS
+func FetchPublicIPv4() string {
+	endpoints := []string{
+		"https://4.ipw.cn",
+		"https://api.ipify.org",
+		"https://ipv4.icanhazip.com",
+	}
+
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	for _, url := range endpoints {
+		resp, err := client.Get(url)
+		if err != nil {
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		ipStr := strings.TrimSpace(string(body))
+		ip := net.ParseIP(ipStr)
+		if ip != nil && ip.To4() != nil && !ip.IsPrivate() && !ip.IsLoopback() {
+			serverIPMu.Lock()
+			lastCapturedServerIPv4 = ipStr
+			serverIPMu.Unlock()
+			return ipStr
+		}
+	}
+	return ""
 }
 
 func (s *DDNSService) TriggerCheck() {
@@ -216,6 +259,7 @@ func isGlobalUnicastIPv6(ip net.IP) bool {
 func (s *DDNSService) CheckAndUpdateIPv6(manualIPv6 string) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	_ = database.SetSetting("last_ipv6_check", now)
+	go FetchPublicIPv4()
 
 	var ipv6 string
 	var err error

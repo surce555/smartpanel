@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useSettingsStore, NetworkInfo } from './settings'
-import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanHost, isLanDomain, isLanEntry, isIPv6Host } from '@/composables/useIPv6Probe'
 
 export interface Tag {
   id: string
@@ -53,7 +53,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   const draggingBookmarkId = ref<string | null>(null)
 
   const settingsStore = useSettingsStore()
-  const { isIPv6Available, routePreference } = useIPv6Probe()
+  const { isIPv6Available, isLanAvailable, routePreference } = useIPv6Probe()
 
   function getInternalUrl(b: Bookmark): string {
     return b.url_internal ? b.url_internal.trim() : ''
@@ -86,6 +86,29 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
       .replace(/{ipv6}/g, net.current_ipv6 || net.detected_host_ipv6 || '')
   }
 
+  function isCurrentClientInLan(): boolean {
+    const net = settingsStore.networkInfo
+    const hostname = window.location.hostname
+
+    // 1. Accessed directly via LAN host / IP / local domain
+    if (isLanEntry(hostname, net.lan_domain)) {
+      return true
+    }
+
+    // 2. Backend verified the visitor is in LAN
+    // (via private IP, local reverse proxy, or matching public IPv4 router gateway)
+    if (net.is_client_lan === true) {
+      return true
+    }
+
+    // 3. Active client LAN probe confirmed reachability
+    if (isLanAvailable.value === true) {
+      return true
+    }
+
+    return false
+  }
+
   /**
    * Resolve final URL for a bookmark dynamically based on network state
    * Priority hierarchy:
@@ -112,27 +135,29 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     }
 
     // 2. Auto Routing (智能优选: 内网 ➔ IPv6 ➔ 域名)
-    const hostname = window.location.hostname
-
-    // (a) Visiting via LAN IP / hostname: prioritize internal URL
-    if (isLanHost(hostname)) {
+    // (a) Visiting in LAN environment: prioritize internal URL
+    if (isCurrentClientInLan()) {
       return internalUrl || v6Url || fallbackUrl || '#'
     }
 
-    // (b) Visiting via IPv6 host: prioritize IPv6 template
-    if (isIPv6Host(hostname)) {
+    // (b) Visiting via bare IPv6 host: prioritize IPv6 template
+    if (isIPv6Host(window.location.hostname)) {
       return v6Url || internalUrl || fallbackUrl || '#'
     }
 
     // (c) Visiting via Domain (e.g. pan.yourdomain.com):
-    // Prioritize IPv6 if available; fallback to domain proxy; finally fallback to internal
-    if (isIPv6Available.value !== false && v6Url) {
+    // Only use IPv6 direct if IPv6 is CONFIRMED available (isIPv6Available.value === true)!
+    if (isIPv6Available.value === true && v6Url) {
       return v6Url
     }
+
+    // Otherwise, fallback to Cloudflare Tunnel / Domain proxy
     if (fallbackUrl) {
       return fallbackUrl
     }
-    return internalUrl || v6Url || '#'
+
+    // If no fallback URL configured, try v6Url or internalUrl as last resort
+    return v6Url || internalUrl || '#'
   }
 
   // Filtered bookmarks

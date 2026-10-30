@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useIPv6Probe, isLanHost, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanEntry, isIPv6Host } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
-const { isIPv6Available, routePreference, setRoutePreference, probeIPv6 } = useIPv6Probe()
-const settingsStore = useSettingsStore()
+const {
+  isIPv6Available,
+  isLanAvailable,
+  isProbing,
+  lastProbeDetail,
+  routePreference,
+  setRoutePreference,
+  probeIPv6,
+  clearProbeCache,
+} = useIPv6Probe()
 
+const settingsStore = useSettingsStore()
 const showMenu = ref(false)
 
 const currentActiveMode = computed(() => {
@@ -14,17 +23,35 @@ const currentActiveMode = computed(() => {
     return routePreference.value
   }
 
-  // Auto evaluation:
-  if (isLanHost(window.location.hostname)) {
+  const net = settingsStore.networkInfo
+  const hostname = window.location.hostname
+
+  // 1. LAN Environment
+  if (isLanEntry(hostname, net.lan_domain) || net.is_client_lan === true || isLanAvailable.value === true) {
     return 'lan'
   }
-  if (isIPv6Host(window.location.hostname) || isIPv6Available.value === true) {
+
+  // 2. Direct IPv6 Host
+  if (isIPv6Host(hostname)) {
     return 'ipv6'
   }
+
+  // 3. IPv6 confirmed available
+  if (isIPv6Available.value === true) {
+    return 'ipv6'
+  }
+
+  // 4. IPv6 confirmed not available -> Domain
   if (isIPv6Available.value === false) {
     return 'domain'
   }
-  return 'probing'
+
+  // 5. While probing or undetermined
+  if (isProbing.value || isIPv6Available.value === null) {
+    return 'probing'
+  }
+
+  return 'domain'
 })
 
 const badgeConfig = computed(() => {
@@ -37,38 +64,38 @@ const badgeConfig = computed(() => {
         bgColor: 'bg-emerald-100/80 dark:bg-emerald-950/60',
         borderColor: 'border-emerald-200 dark:border-emerald-800',
         icon: 'tabler:home',
-        desc: '当前优先走局域网内网 IP 直连',
+        desc: '当前走局域网内网直连通道',
       }
     case 'ipv6':
       return {
         label: routePreference.value === 'auto' ? 'IPv6 直连' : '强制 IPv6',
-        dotColor: 'bg-emerald-500',
-        textColor: 'text-emerald-700 dark:text-emerald-300',
-        bgColor: 'bg-emerald-100/80 dark:bg-emerald-950/60',
-        borderColor: 'border-emerald-200 dark:border-emerald-800',
+        dotColor: 'bg-blue-500',
+        textColor: 'text-blue-700 dark:text-blue-300',
+        bgColor: 'bg-blue-100/80 dark:bg-blue-950/60',
+        borderColor: 'border-blue-200 dark:border-blue-800',
         icon: 'tabler:bolt',
         desc: '当前通过公网 IPv6 高速直连 NAS',
       }
     case 'domain':
       return {
         label: routePreference.value === 'auto' ? 'CF 代理' : '强制域名',
-        dotColor: 'bg-sky-500',
-        textColor: 'text-sky-700 dark:text-sky-300',
-        bgColor: 'bg-sky-100/80 dark:bg-sky-950/60',
-        borderColor: 'border-sky-200 dark:border-sky-800',
-        icon: 'tabler:world',
-        desc: '当前走 Cloudflare 域名代理回源通道',
+        dotColor: 'bg-amber-500',
+        textColor: 'text-amber-700 dark:text-amber-300',
+        bgColor: 'bg-amber-100/80 dark:bg-amber-950/60',
+        borderColor: 'border-amber-200 dark:border-amber-800',
+        icon: 'tabler:cloud',
+        desc: '当前走 Cloudflare 代理回退回源通道',
       }
     case 'probing':
     default:
       return {
-        label: '探测中...',
+        label: '网络检测中...',
         dotColor: 'bg-slate-400 animate-pulse',
         textColor: 'text-slate-500 dark:text-slate-400',
         bgColor: 'bg-slate-100 dark:bg-slate-800',
         borderColor: 'border-slate-200 dark:border-slate-700',
-        icon: 'tabler:loader',
-        desc: '正在智能探测您的网络环境',
+        icon: 'tabler:loader-2',
+        desc: '正在检测网络环境与 IPv6 连通性',
       }
   }
 })
@@ -99,6 +126,19 @@ const options = [
 function selectMode(mode: 'auto' | 'lan' | 'ipv6' | 'domain') {
   setRoutePreference(mode)
   showMenu.value = false
+}
+
+async function handleReProbe() {
+  clearProbeCache()
+  const net = settingsStore.networkInfo
+  await probeIPv6(undefined, 2500, {
+    clientIP: net.client_ip,
+    directIPv6: net.direct_ipv6,
+    clientHasIPv6: net.client_has_ipv6,
+    viaCloudflare: net.via_cloudflare,
+    v6domain: net.v6domain,
+    force: true,
+  })
 }
 
 function handleOutsideClick(e: MouseEvent) {
@@ -139,11 +179,21 @@ onUnmounted(() => {
     <!-- Dropdown Menu -->
     <div
       v-if="showMenu"
-      class="absolute left-0 mt-2 w-64 p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-50 text-left space-y-1 animate-in fade-in zoom-in-95 duration-150"
+      class="absolute left-0 mt-2 w-72 p-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl z-50 text-left space-y-1 animate-in fade-in zoom-in-95 duration-150"
     >
-      <div class="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
-        <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">网络分流优先级</div>
-        <div class="text-[10px] text-slate-400">决定点击书签卡片时优先跳转的连接模式</div>
+      <div class="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <div class="text-[11px] font-bold text-slate-700 dark:text-slate-300">网络智能分流</div>
+          <div class="text-[10px] text-slate-400">点击书签卡片时优先匹配的连接路线</div>
+        </div>
+        <button
+          type="button"
+          @click.stop="handleReProbe"
+          class="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="重新检测网络连通性"
+        >
+          <Icon icon="tabler:refresh" class="w-3.5 h-3.5" :class="{ 'animate-spin': isProbing }" />
+        </button>
       </div>
 
       <button
@@ -164,6 +214,16 @@ onUnmounted(() => {
         </div>
         <span class="text-[10px] text-slate-400 font-normal leading-tight">{{ opt.desc }}</span>
       </button>
+
+      <!-- Diagnostic Status Footer -->
+      <div v-if="lastProbeDetail || settingsStore.networkInfo.client_ip" class="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800/60 px-2 py-1 text-[10px] text-slate-400 space-y-0.5 leading-relaxed">
+        <div v-if="settingsStore.networkInfo.client_ip" class="truncate">
+          访客 IP: <span class="font-mono text-slate-600 dark:text-slate-300">{{ settingsStore.networkInfo.client_ip }}</span>
+        </div>
+        <div v-if="lastProbeDetail" class="text-slate-500 dark:text-slate-400">
+          {{ lastProbeDetail }}
+        </div>
+      </div>
     </div>
   </div>
 </template>

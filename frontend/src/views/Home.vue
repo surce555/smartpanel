@@ -173,7 +173,14 @@ onMounted(async () => {
     router.replace({ name: 'Login', query: { redirect: '/' } })
     return
   }
-  probeIPv6()
+  const net = settingsStore.networkInfo
+  probeIPv6(undefined, 2500, {
+    clientIP: net.client_ip,
+    directIPv6: net.direct_ipv6,
+    clientHasIPv6: net.client_has_ipv6,
+    viaCloudflare: net.via_cloudflare,
+    v6domain: net.v6domain,
+  })
   window.addEventListener('click', handleOutsideClick)
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('mousemove', resetIdleTimer)

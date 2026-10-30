@@ -147,6 +147,13 @@ func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 		isLAN = true
 	}
 
+	// If the visitor shares the exact same public IPv4 egress with the NAS,
+	// they are behind the same home NAT gateway/router on the same LAN.
+	serverIPv4 := services.GetCapturedServerIPv4()
+	if serverIPv4 != "" && clientIP != nil && clientIP.To4() != nil && clientIP.String() == serverIPv4 {
+		isLAN = true
+	}
+
 	// Check if request Host is a LAN IP or local domain
 	hostOnly := c.Request.Host
 	if h, _, err := net.SplitHostPort(hostOnly); err == nil {
@@ -160,8 +167,11 @@ func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 	}
 
 	lanDomain := database.GetSetting("lan_domain")
-	if lanDomain != "" && (hostOnly == lanDomain || strings.HasSuffix(hostOnly, "."+lanDomain)) {
-		isLAN = true
+	if lanDomain != "" {
+		cleanLan := strings.TrimPrefix(strings.TrimSpace(lanDomain), "*.")
+		if hostOnly == cleanLan || strings.HasSuffix(hostOnly, "."+cleanLan) {
+			isLAN = true
+		}
 	}
 
 	hostLANIPs := getHostLANIPs()
