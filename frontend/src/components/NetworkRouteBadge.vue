@@ -12,6 +12,7 @@ const {
   routePreference,
   setRoutePreference,
   probeIPv6,
+  probeLanConnectivity,
   clearProbeCache,
 } = useIPv6Probe()
 
@@ -143,12 +144,15 @@ function selectMode(mode: 'auto' | 'lan' | 'ipv6' | 'domain') {
 async function handleReProbe() {
   clearProbeCache()
   const net = settingsStore.networkInfo
+  await probeLanConnectivity(net.host_lan_ips, net.server_port, 800, [net.current_ipv6, net.detected_host_ipv6])
   await probeIPv6(undefined, 2500, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     clientHasIPv6: net.client_has_ipv6,
     viaCloudflare: net.via_cloudflare,
     v6domain: net.v6domain,
+    currentIPv6: net.current_ipv6,
+    nasLanIps: net.host_lan_ips,
     force: true,
   })
 }

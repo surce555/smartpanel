@@ -56,15 +56,19 @@ onMounted(async () => {
   settingsStore.setupSSE()
 
   const net = settingsStore.networkInfo
-  // Probe with network information
+  // 1. Immediately probe LAN via WebRTC and local endpoints
+  probeLanConnectivity(net.host_lan_ips, net.server_port, 800, [net.current_ipv6, net.detected_host_ipv6])
+
+  // 2. Probe IPv6 capability
   probeIPv6(undefined, 2500, {
     clientIP: net.client_ip,
     directIPv6: net.direct_ipv6,
     clientHasIPv6: net.client_has_ipv6,
     viaCloudflare: net.via_cloudflare,
     v6domain: net.v6domain,
+    currentIPv6: net.current_ipv6,
+    nasLanIps: net.host_lan_ips,
   })
-  probeLanConnectivity(net.host_lan_ips, net.server_port)
 
   // Check auth
   authStore.fetchMe()

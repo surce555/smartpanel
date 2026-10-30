@@ -151,8 +151,8 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     }
 
     // (c) Visiting via Domain (e.g. pan.yourdomain.com):
-    // Only use IPv6 direct if IPv6 is CONFIRMED available (isIPv6Available.value === true)!
-    if (isIPv6Available.value === true && v6Url) {
+    // Prioritize IPv6 template if available or not confirmed unsupported
+    if (isIPv6Available.value !== false && v6Url) {
       return v6Url
     }
 
