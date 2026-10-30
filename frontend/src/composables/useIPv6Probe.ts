@@ -193,9 +193,18 @@ export function useIPv6Probe() {
    * @param opts.force          ignore the cached answer
    *
    * Evidence, strongest first:
-   *   1. `direct_ipv6` - this page itself was served over IPv6.
-   *   2. page opened via a bare IPv6 host.
-   *   3. active client-side IPv6 test (see `probeClientIPv6`).
+   *   1. `client_has_ipv6` - backend saw the visitor's real address (through
+   *      CF-Connecting-IP / XFF when proxied) and it is an IPv6 address, so the
+   *      browser demonstrably has a working IPv6 stack.
+   *   2. `direct_ipv6` - this page itself was served over IPv6.
+   *   3. page opened via a bare IPv6 host.
+   *   4. active client-side IPv6 test (see `probeClientIPv6`).
+   *
+   * Evidence 1 outranks the browser probe on purpose. The probe talks to
+   * third-party hosts, so when the user is behind a proxy/VPN or Clash with
+   * IPv6 disabled it fails, even though the NAS is perfectly reachable over
+   * IPv6 from that same machine. The backend's view of the visitor address has
+   * no such blind spot.
    */
   async function probeIPv6(
     _customProbeUrl?: string,
@@ -203,32 +212,32 @@ export function useIPv6Probe() {
     opts: {
       clientIP?: string
       directIPv6?: boolean
+      clientHasIPv6?: boolean
       viaCloudflare?: boolean
       force?: boolean
     } = {}
   ): Promise<boolean> {
     isProxiedClient.value = Boolean(opts.viaCloudflare)
 
-    // 1. Backend proved this page arrived over direct IPv6.
+    // 1. Backend proved the client itself is IPv6-capable.
+    if (opts.clientHasIPv6) {
+      lastProbeDetail.value = '后端观测到访客地址为 IPv6，客户端支持 IPv6'
+      return setIPv6Result(true)
+    }
+
+    // 2. Backend proved this page arrived over direct IPv6.
     if (opts.directIPv6) {
       lastProbeDetail.value = '此页面本身经由 IPv6 直连到达，客户端支持 IPv6'
       return setIPv6Result(true)
     }
 
-    // 2. Page opened through a bare IPv6 host.
+    // 3. Page opened through a bare IPv6 host.
     if (isIPv6Host(window.location.hostname)) {
       lastProbeDetail.value = '当前通过 IPv6 地址访问，客户端支持 IPv6'
       return setIPv6Result(true)
     }
 
-    // 2b. Direct (non-proxied) connection whose peer address is IPv6. Equivalent
-    //     proof to `direct_ipv6`, kept for deployments that do not populate it.
-    if (!isProxiedClient.value && isIPv6Address(opts.clientIP)) {
-      lastProbeDetail.value = '后端观测到本次请求来自 IPv6 地址，客户端支持 IPv6'
-      return setIPv6Result(true)
-    }
-
-    // 3. Reuse a recent answer.
+    // 4. Reuse a recent answer.
     if (!opts.force) {
       const cached = readIPv6Cache()
       if (cached !== null) {

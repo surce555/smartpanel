@@ -33,56 +33,6 @@ func isPrivateOrLocalIP(ip net.IP) bool {
 	return false
 }
 
-func isSameSubnetIPv6(clientIP net.IP) bool {
-	if clientIP == nil || clientIP.To4() != nil || clientIP.IsLoopback() {
-		return false
-	}
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return false
-	}
-	client16 := clientIP.To16()
-	if client16 == nil {
-		return false
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip == nil || ip.To4() != nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-				continue
-			}
-			host16 := ip.To16()
-			if host16 != nil && len(host16) == 16 && len(client16) == 16 {
-				// Compare first 64 bits (8 bytes) of IPv6 address
-				match := true
-				for i := 0; i < 8; i++ {
-					if host16[i] != client16[i] {
-						match = false
-						break
-					}
-				}
-				if match {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 func getHostLANIPs() []string {
 	var ips []string
 	ifaces, err := net.Interfaces()
@@ -131,9 +81,47 @@ func isProxiedByCloudflare(c *gin.Context) bool {
 	return false
 }
 
+// resolveClientIP returns the address of the browser, not of whatever hop
+// proxied the request to us.
+//
+// The router is configured with `SetTrustedProxies(nil)`, so `c.ClientIP()` only
+// ever returns the TCP peer. Behind the Cloudflare Tunnel that peer is
+// Cloudflare's own edge node, so every visitor looked like a public IP and
+// `is_client_lan` was permanently false — which silently disabled LAN routing
+// even when browsing from inside the house.
+//
+// When the edge tells us who the visitor really is (CF-Connecting-IP), use it:
+// it is the only way to classify the client correctly through a tunnel. Without
+// that header (direct access, cloudflared running with --no-tls-verify and no
+// edge) fall back to the peer, which is then the real client.
+func resolveClientIP(c *gin.Context) string {
+	if v := strings.TrimSpace(c.GetHeader("CF-Connecting-IP")); v != "" {
+		if net.ParseIP(v) != nil {
+			return v
+		}
+	}
+	// X-Forwarded-For: first entry is the original client.
+	if v := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); v != "" {
+		first := strings.TrimSpace(strings.Split(v, ",")[0])
+		if net.ParseIP(first) != nil {
+			return first
+		}
+	}
+	if v := strings.TrimSpace(c.GetHeader("X-Real-IP")); v != "" {
+		if net.ParseIP(v) != nil {
+			return v
+		}
+	}
+	return c.ClientIP()
+}
+
 func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
-	rawClientIP := c.ClientIP()
+	rawClientIP := resolveClientIP(c)
 	clientIP := net.ParseIP(rawClientIP)
+
+	// Whether this request was relayed by the Cloudflare edge. Matters below: a
+	// tunnel terminates on the NAS itself, so the TCP peer is loopback.
+	proxied := isProxiedByCloudflare(c)
 
 	remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	var remoteIP net.IP
@@ -142,9 +130,20 @@ func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 	}
 
 	isLAN := false
-	if clientIP != nil && (isPrivateOrLocalIP(clientIP) || isSameSubnetIPv6(clientIP)) {
+	// Only genuinely private/loopback/link-local visitor addresses count as LAN.
+	//
+	// `isSameSubnetIPv6` used to be OR'ed in here by comparing the first 64 bits
+	// against the host's own interfaces. That is wrong on residential IPv6: ISP
+	// deployments typically hand the whole street the same /64 (or share a /56),
+	// so unrelated neighbours matched and were treated as "in the LAN".
+	//
+	// The peer address (RemoteAddr) is deliberately NOT used when the request
+	// came through a tunnel: `cloudflared` runs on the NAS itself, so the peer is
+	// always 127.0.0.1 and would make every remote visitor look local. Only the
+	// resolved visitor address is meaningful there.
+	if clientIP != nil && isPrivateOrLocalIP(clientIP) {
 		isLAN = true
-	} else if remoteIP != nil && (isPrivateOrLocalIP(remoteIP) || isSameSubnetIPv6(remoteIP)) {
+	} else if !proxied && remoteIP != nil && isPrivateOrLocalIP(remoteIP) {
 		isLAN = true
 	}
 
@@ -186,14 +185,30 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 	isLAN, clientIPStr, hostIPs, srvPort := evaluateLANEnvironment(c)
 
 	// Whether this page was loaded over a direct (non-proxied) connection, and
-	// whether that direct connection was IPv6. The frontend uses this as proof
-	// that the client really has working IPv6 reachability to the NAS.
+	// whether that direct connection was IPv6.
 	viaCloudflare := isProxiedByCloudflare(c)
 	remoteHost, _, splitErr := net.SplitHostPort(c.Request.RemoteAddr)
 	directIPv6 := false
 	if splitErr == nil && !viaCloudflare {
 		if rip := net.ParseIP(remoteHost); rip != nil && rip.To4() == nil {
 			directIPv6 = true
+		}
+	}
+
+	// "The client has IPv6 connectivity at all", which is a SEPARATE question
+	// from "the client reached the NAS over IPv6 just now".
+	//
+	// Behind the Cloudflare edge the visitor's real address arrives in
+	// CF-Connecting-IP. If that address is IPv6, the browser demonstrably has a
+	// working IPv6 stack (it used IPv6 to reach Cloudflare). That is exactly the
+	// signal the frontend needs to decide whether to hand out `{ipv6}` links —
+	// and it is far more reliable than probing third-party hosts from the page,
+	// which fails whenever the user's proxy/VPN has no IPv6 egress even though
+	// the NAS itself is reachable over IPv6.
+	clientHasIPv6 := directIPv6
+	if !clientHasIPv6 {
+		if cip := net.ParseIP(clientIPStr); cip != nil && cip.To4() == nil && !isPrivateOrLocalIP(cip) {
+			clientHasIPv6 = true
 		}
 	}
 
@@ -216,6 +231,7 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 		ServerPort:       srvPort,
 		ViaCloudflare:    viaCloudflare,
 		DirectIPv6:       directIPv6,
+		ClientHasIPv6:    clientHasIPv6,
 	}
 
 	c.JSON(http.StatusOK, info)
@@ -261,6 +277,12 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 			directIPv6 = true
 		}
 	}
+	clientHasIPv6 := directIPv6
+	if !clientHasIPv6 {
+		if cip := net.ParseIP(clientIPStr); cip != nil && cip.To4() == nil && !isPrivateOrLocalIP(cip) {
+			clientHasIPv6 = true
+		}
+	}
 
 	initialInfo := models.NetworkInfo{
 		CurrentIPv6:      database.GetSetting("current_ipv6"),
@@ -281,6 +303,7 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 		ServerPort:       srvPort,
 		ViaCloudflare:    viaCloudflare,
 		DirectIPv6:       directIPv6,
+		ClientHasIPv6:    clientHasIPv6,
 	}
 	dataBytes, _ := json.Marshal(initialInfo)
 	_, _ = fmt.Fprintf(c.Writer, "event: network_update\ndata: %s\n\n", string(dataBytes))
@@ -302,6 +325,7 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 			// this the frontend would see them reset to false mid-session.
 			info.ViaCloudflare = viaCloudflare
 			info.DirectIPv6 = directIPv6
+			info.ClientHasIPv6 = clientHasIPv6
 			bytes, err := json.Marshal(info)
 			if err != nil {
 				return true

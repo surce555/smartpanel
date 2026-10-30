@@ -103,6 +103,11 @@ type NetworkInfo struct {
 	// DirectIPv6 is true only when the page was loaded over a direct (non-proxied)
 	// IPv6 connection, i.e. the browser provably reached the NAS over IPv6.
 	DirectIPv6 bool `json:"direct_ipv6"`
+	// ClientHasIPv6 is true when the client demonstrably has IPv6 connectivity,
+	// even if it reached us through the Cloudflare edge (the visitor address in
+	// CF-Connecting-IP is IPv6). This decides whether `{ipv6}` links are usable
+	// from this device.
+	ClientHasIPv6 bool `json:"client_has_ipv6"`
 }
 
 type NetworkSettingsUpdateRequest struct {

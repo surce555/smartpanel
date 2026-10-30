@@ -15,17 +15,20 @@ const currentActiveMode = computed(() => {
   }
 
   // Auto evaluation — must mirror `resolveBookmarkUrl` exactly, otherwise the
-  // badge would claim "IPv6 直连" while the cards actually open the domain URL.
+  // badge would claim one mode while the cards actually open another.
   const hostname = window.location.hostname
+  const net = settingsStore.networkInfo
 
-  if (isLanEntry(hostname, settingsStore.networkInfo.lan_domain)) {
+  // Same LAN rule as the resolver: access origin OR the backend's view of the
+  // visitor address.
+  if (isLanEntry(hostname, net.lan_domain) || net.is_client_lan === true) {
     return 'lan'
   }
   if (isIPv6Host(hostname)) {
     return 'ipv6'
   }
-  // Fail-safe: IPv6 only when positively confirmed, matching the resolver.
-  return isIPv6Available.value === true ? 'ipv6' : 'domain'
+  // Mirrors the resolver's veto semantics: IPv6 unless explicitly disproved.
+  return isIPv6Available.value !== false ? 'ipv6' : 'domain'
 })
 
 const badgeConfig = computed(() => {

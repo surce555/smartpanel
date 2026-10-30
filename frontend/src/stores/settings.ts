@@ -25,6 +25,8 @@ export interface NetworkInfo {
   via_cloudflare?: boolean
   /** Page was served over a direct (non-proxied) IPv6 connection */
   direct_ipv6?: boolean
+  /** Client demonstrably has IPv6 connectivity (visitor address is IPv6) */
+  client_has_ipv6?: boolean
 }
 
 export const useSettingsStore = defineStore('settings', () => {

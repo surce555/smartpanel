@@ -87,12 +87,26 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   }
 
   /**
-   * Whether the current page is genuinely being visited through a LAN address
-   * (private IPv4 / localhost / *.local / *.lan / configured lan_domain).
-   * See `isLanEntry` for why reachability signals must not be used here.
+   * Whether the current visitor is genuinely on the same LAN as the NAS.
+   *
+   * Two independent sources, either of which is sufficient:
+   *
+   *  - the access origin: private IP / localhost / *.local / *.lan / lan_domain
+   *    — proves the page itself was opened through the LAN entry;
+   *  - the backend's `is_client_lan`, which is computed from the VISITOR's real
+   *    address. This is the only usable signal when the panel is opened through
+   *    the public domain but the visitor happens to sit in the same house: the
+   *    hostname is public, yet the traffic never leaves the LAN.
+   *
+   * `is_client_lan` is safe to trust now because the backend resolves the
+   * visitor address from CF-Connecting-IP / X-Forwarded-For instead of the TCP
+   * peer, which behind a tunnel is Cloudflare's edge and would otherwise make
+   * this permanently false.
    */
   function isAccessingViaLanEntry(): boolean {
-    return isLanEntry(window.location.hostname, settingsStore.networkInfo.lan_domain)
+    const net = settingsStore.networkInfo
+    if (isLanEntry(window.location.hostname, net.lan_domain)) return true
+    return net.is_client_lan === true
   }
 
   /**
