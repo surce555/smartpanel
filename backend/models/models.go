@@ -108,6 +108,9 @@ type NetworkInfo struct {
 	// CF-Connecting-IP is IPv6). This decides whether `{ipv6}` links are usable
 	// from this device.
 	ClientHasIPv6 bool `json:"client_has_ipv6"`
+	ServerPublicIPv4 string `json:"server_public_ipv4,omitempty"`
+	LANReason string `json:"lan_reason,omitempty"`
+	LANIPWhitelist string `json:"lan_ip_whitelist,omitempty"`
 }
 
 type NetworkSettingsUpdateRequest struct {
@@ -117,6 +120,7 @@ type NetworkSettingsUpdateRequest struct {
 	Domain              string `json:"domain"`
 	V6Domain            string `json:"v6domain"`
 	LANDomain           string `json:"lan_domain"`
+	LANIPWhitelist      string `json:"lan_ip_whitelist"`
 	DDNSEnabled         bool   `json:"ddns_enabled"`
 	DDNSIntervalMinutes int    `json:"ddns_interval_minutes"`
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useIPv6Probe, isLanEntry, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanEntry, isIPv6Host, isIpInWhitelist } from '@/composables/useIPv6Probe'
 import { useSettingsStore } from '@/stores/settings'
 
 const {
@@ -17,19 +17,31 @@ const {
 
 const settingsStore = useSettingsStore()
 const showMenu = ref(false)
+const isWhitelisting = ref(false)
+const whitelistSuccess = ref(false)
+
+const isClientInLan = computed(() => {
+  const net = settingsStore.networkInfo
+  const hostname = window.location.hostname
+  return (
+    isLanEntry(hostname, net.lan_domain) ||
+    net.is_client_lan === true ||
+    isIpInWhitelist(net.client_ip, net.lan_ip_whitelist) ||
+    isLanAvailable.value === true
+  )
+})
 
 const currentActiveMode = computed(() => {
   if (routePreference.value !== 'auto') {
     return routePreference.value
   }
 
-  const net = settingsStore.networkInfo
-  const hostname = window.location.hostname
-
   // 1. LAN Environment
-  if (isLanEntry(hostname, net.lan_domain) || net.is_client_lan === true || isLanAvailable.value === true) {
+  if (isClientInLan.value) {
     return 'lan'
   }
+
+  const hostname = window.location.hostname
 
   // 2. Direct IPv6 Host
   if (isIPv6Host(hostname)) {
@@ -141,6 +153,29 @@ async function handleReProbe() {
   })
 }
 
+async function handleQuickWhitelist() {
+  const net = settingsStore.networkInfo
+  if (!net.client_ip) return
+  const ip = net.client_ip.trim()
+  const existing = (net.lan_ip_whitelist || '').trim()
+  const updated = existing ? `${existing}, ${ip}` : ip
+  isWhitelisting.value = true
+  try {
+    await settingsStore.saveSettings({ lan_ip_whitelist: updated })
+    settingsStore.networkInfo.lan_ip_whitelist = updated
+    settingsStore.networkInfo.is_client_lan = true
+    settingsStore.networkInfo.lan_reason = `访客 IP (${ip}) 已加入家庭白名单`
+    whitelistSuccess.value = true
+    setTimeout(() => {
+      whitelistSuccess.value = false
+    }, 3000)
+  } catch (e: any) {
+    console.error('Failed to whitelist IP:', e)
+  } finally {
+    isWhitelisting.value = false
+  }
+}
+
 function handleOutsideClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.network-route-container')) {
@@ -216,10 +251,30 @@ onUnmounted(() => {
       </button>
 
       <!-- Diagnostic Status Footer -->
-      <div v-if="lastProbeDetail || settingsStore.networkInfo.client_ip" class="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800/60 px-2 py-1 text-[10px] text-slate-400 space-y-0.5 leading-relaxed">
-        <div v-if="settingsStore.networkInfo.client_ip" class="truncate">
-          访客 IP: <span class="font-mono text-slate-600 dark:text-slate-300">{{ settingsStore.networkInfo.client_ip }}</span>
+      <div v-if="lastProbeDetail || settingsStore.networkInfo.client_ip" class="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800/60 px-2 py-1 text-[10px] text-slate-400 space-y-1 leading-relaxed">
+        <div v-if="settingsStore.networkInfo.client_ip" class="truncate flex items-center justify-between">
+          <span>访客 IP: <span class="font-mono text-slate-600 dark:text-slate-300">{{ settingsStore.networkInfo.client_ip }}</span></span>
         </div>
+
+        <div v-if="settingsStore.networkInfo.lan_reason" class="text-emerald-600 dark:text-emerald-400 truncate flex items-center gap-1 font-medium">
+          <Icon icon="tabler:shield-check" class="w-3.5 h-3.5 shrink-0" />
+          <span>{{ settingsStore.networkInfo.lan_reason }}</span>
+        </div>
+
+        <!-- Quick 1-click button if user is in home network but not auto-detected -->
+        <div v-if="!isClientInLan && settingsStore.networkInfo.client_ip" class="pt-0.5">
+          <button
+            type="button"
+            @click.stop="handleQuickWhitelist"
+            :disabled="isWhitelisting"
+            class="w-full py-1 px-2 text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-300 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1 transition-all cursor-pointer font-medium"
+            title="将当前访客 IP 记录为内网，之后无论通过任何域名访问都自动直连"
+          >
+            <Icon icon="tabler:home-plus" class="w-3.5 h-3.5 shrink-0" />
+            <span>{{ isWhitelisting ? '正在配置...' : whitelistSuccess ? '已生效为家庭内网！' : '当前是家庭网络？一键设为内网' }}</span>
+          </button>
+        </div>
+
         <div v-if="lastProbeDetail" class="text-slate-500 dark:text-slate-400">
           {{ lastProbeDetail }}
         </div>

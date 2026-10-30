@@ -10,12 +10,23 @@ const cfRecordId = ref<string>(settingsStore.networkInfo.cf_record_id || '')
 const domain = ref<string>(settingsStore.networkInfo.domain || '')
 const v6domain = ref<string>(settingsStore.networkInfo.v6domain || '')
 const lanDomain = ref<string>(settingsStore.networkInfo.lan_domain || '')
+const lanIpWhitelist = ref<string>(settingsStore.networkInfo.lan_ip_whitelist || '')
 const ddnsEnabled = ref<boolean>(settingsStore.networkInfo.ddns_enabled || false)
 const ddnsInterval = ref<number>(settingsStore.networkInfo.ddns_interval_minutes || 5)
 const manualIPv6 = ref<string>('')
 
 const isChecking = ref<boolean>(false)
 const saveMsg = ref<string>('')
+
+function addCurrentIpToWhitelist() {
+  const currentIp = settingsStore.networkInfo.client_ip
+  if (!currentIp) return
+  const items = lanIpWhitelist.value.split(',').map((s) => s.trim()).filter(Boolean)
+  if (!items.includes(currentIp)) {
+    items.push(currentIp)
+    lanIpWhitelist.value = items.join(', ')
+  }
+}
 
 // Detected client/host IPv6
 const browserHostIPv6 = computed(() => {
@@ -60,6 +71,7 @@ async function handleSave() {
       domain: domain.value,
       v6domain: v6domain.value,
       lan_domain: lanDomain.value.trim(),
+      lan_ip_whitelist: lanIpWhitelist.value.trim(),
       ddns_enabled: ddnsEnabled.value ? 'true' : 'false',
       ddns_interval_minutes: String(ddnsInterval.value),
     }
@@ -118,6 +130,12 @@ async function handleManualCheck() {
           </span>
         </div>
         <div>
+          <span class="text-slate-500 block mb-0.5">当前公网 IPv4:</span>
+          <span class="font-mono font-semibold text-slate-800 dark:text-slate-200">
+            {{ settingsStore.networkInfo.server_public_ipv4 || '暂无检测记录' }}
+          </span>
+        </div>
+        <div>
           <span class="text-slate-500 block mb-0.5">当前访客客户端 IP:</span>
           <span class="font-mono font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
             <span>{{ settingsStore.networkInfo.client_ip || '127.0.0.1' }}</span>
@@ -134,11 +152,8 @@ async function handleManualCheck() {
               外网
             </span>
           </span>
-        </div>
-        <div>
-          <span class="text-slate-500 block mb-0.5">上次检测时间:</span>
-          <span class="font-mono text-slate-700 dark:text-slate-300">
-            {{ settingsStore.networkInfo.last_ipv6_check || '从不' }}
+          <span v-if="settingsStore.networkInfo.lan_reason" class="block text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-sans">
+            {{ settingsStore.networkInfo.lan_reason }}
           </span>
         </div>
         <div>
@@ -148,6 +163,9 @@ async function handleManualCheck() {
             :class="ddnsStatusBadge.color"
           >
             {{ ddnsStatusBadge.text }}
+          </span>
+          <span class="block text-[10px] text-slate-400 mt-0.5 font-mono">
+            {{ settingsStore.networkInfo.last_ipv6_check || '从不' }}
           </span>
         </div>
       </div>
@@ -232,6 +250,32 @@ async function handleManualCheck() {
         />
         <p class="text-[11px] text-slate-400 mt-1">此域名访问时自动识别内网并优先局域网直连</p>
       </div>
+    </div>
+
+    <!-- LAN IP Whitelist -->
+    <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 space-y-2">
+      <div class="flex items-center justify-between">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+          内网 / 家庭出口 IP 白名单 (可选)
+        </label>
+        <button
+          v-if="settingsStore.networkInfo.client_ip"
+          type="button"
+          @click="addCurrentIpToWhitelist"
+          class="px-2.5 py-1 text-[11px] bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-medium rounded-lg transition-colors border border-indigo-200/50 dark:border-indigo-800/50"
+        >
+          + 将当前访客 IP ({{ settingsStore.networkInfo.client_ip }}) 加入白名单
+        </button>
+      </div>
+      <input
+        type="text"
+        v-model="lanIpWhitelist"
+        placeholder="例如: 112.96.12.34, 192.168.0.0/16 (多个用逗号隔开)"
+        class="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+      />
+      <p class="text-[11px] text-slate-400">
+        当访客客户端匹配此白名单时，无论通过何种域名访问（包括 Cloudflare Tunnel），系统均自动判定为处于内网环境，并优先使用内网直连打开各书签。
+      </p>
     </div>
 
     <!-- Cloudflare DDNS Configuration -->

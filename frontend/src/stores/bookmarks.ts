@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useSettingsStore, NetworkInfo } from './settings'
-import { useIPv6Probe, isLanHost, isLanDomain, isLanEntry, isIPv6Host } from '@/composables/useIPv6Probe'
+import { useIPv6Probe, isLanHost, isLanDomain, isLanEntry, isIPv6Host, isIpInWhitelist } from '@/composables/useIPv6Probe'
 
 export interface Tag {
   id: string
@@ -96,12 +96,17 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     }
 
     // 2. Backend verified the visitor is in LAN
-    // (via private IP, local reverse proxy, or matching public IPv4 router gateway)
+    // (via private IP, local reverse proxy, IPv6 /64 prefix, or matching public IPv4 router gateway)
     if (net.is_client_lan === true) {
       return true
     }
 
-    // 3. Active client LAN probe confirmed reachability
+    // 3. Visitor IP matches user-configured LAN IP whitelist
+    if (isIpInWhitelist(net.client_ip, net.lan_ip_whitelist)) {
+      return true
+    }
+
+    // 4. Active client LAN probe confirmed reachability
     if (isLanAvailable.value === true) {
       return true
     }

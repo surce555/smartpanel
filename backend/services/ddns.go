@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,6 +40,13 @@ func InitDDNSService() *DDNSService {
 		stopChan:     make(chan struct{}),
 	}
 
+	// Load cached public IPv4 and IPv6 immediately from database
+	if cachedIPv4 := database.GetSetting("server_public_ipv4"); cachedIPv4 != "" {
+		serverIPMu.Lock()
+		lastCapturedServerIPv4 = cachedIPv4
+		serverIPMu.Unlock()
+	}
+
 	go DDNS.worker()
 
 	// Trigger immediate check on application startup
@@ -58,7 +66,7 @@ func RecordServerIPv6FromHost(host string) {
 	}
 	h = strings.Trim(h, "[]")
 	ip := net.ParseIP(h)
-	if ip != nil && ip.To4() == nil && isGlobalUnicastIPv6(ip) {
+	if ip != nil && ip.To4() == nil && IsGlobalUnicastIPv6(ip) {
 		serverIPMu.Lock()
 		lastCapturedServerIPv6 = ip.String()
 		serverIPMu.Unlock()
@@ -77,16 +85,79 @@ func GetCapturedServerIPv4() string {
 	return lastCapturedServerIPv4
 }
 
-// FetchPublicIPv4 probes external endpoints to get public IPv4 address of the NAS
+// GetAllServerIPv6s collects all known IPv6 addresses of the server
+func GetAllServerIPv6s() []string {
+	var ips []string
+	seen := make(map[string]bool)
+
+	addIP := func(ipStr string) {
+		ipStr = strings.Trim(strings.TrimSpace(ipStr), "[]")
+		if ipStr == "" || seen[ipStr] {
+			return
+		}
+		ip := net.ParseIP(ipStr)
+		if ip != nil && ip.To4() == nil && IsGlobalUnicastIPv6(ip) {
+			seen[ipStr] = true
+			ips = append(ips, ipStr)
+		}
+	}
+
+	if cur := database.GetSetting("current_ipv6"); cur != "" {
+		addIP(cur)
+	}
+	if captured := GetCapturedServerIPv6(); captured != "" {
+		addIP(captured)
+	}
+
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip != nil && ip.To4() == nil && IsGlobalUnicastIPv6(ip) {
+					addIP(ip.String())
+				}
+			}
+		}
+	}
+	return ips
+}
+
+// FetchPublicIPv4 probes external endpoints to get public IPv4 address of the NAS.
+// Explicitly forces TCP4 dial to avoid getting IPv6 on dual-stack hosts.
 func FetchPublicIPv4() string {
 	endpoints := []string{
 		"https://4.ipw.cn",
 		"https://api.ipify.org",
 		"https://ipv4.icanhazip.com",
+		"https://myip.ipip.net/s",
+		"https://api-ipv4.ip.sb/ip",
 	}
 
-	client := &http.Client{
+	dialer := &net.Dialer{
 		Timeout: 3 * time.Second,
+	}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "tcp4", addr)
+		},
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   4 * time.Second,
 	}
 
 	for _, url := range endpoints {
@@ -101,12 +172,17 @@ func FetchPublicIPv4() string {
 		}
 
 		ipStr := strings.TrimSpace(string(body))
+		fields := strings.Fields(ipStr)
+		if len(fields) > 0 {
+			ipStr = fields[0]
+		}
 		ip := net.ParseIP(ipStr)
 		if ip != nil && ip.To4() != nil && !ip.IsPrivate() && !ip.IsLoopback() {
 			serverIPMu.Lock()
-			lastCapturedServerIPv4 = ipStr
+			lastCapturedServerIPv4 = ip.String()
 			serverIPMu.Unlock()
-			return ipStr
+			_ = database.SetSetting("server_public_ipv4", ip.String())
+			return ip.String()
 		}
 	}
 	return ""
@@ -247,13 +323,17 @@ func FetchPublicIPv6() (string, error) {
 	return "", fmt.Errorf("未能获取到有效的公网 IPv6 地址 (外部探针均不可达且本地未发现全局单播地址)")
 }
 
-func isGlobalUnicastIPv6(ip net.IP) bool {
+func IsGlobalUnicastIPv6(ip net.IP) bool {
 	if len(ip) != 16 {
 		return false
 	}
 	// 2000::/3 means first byte is 0x20 to 0x3F
 	firstByte := ip[0]
 	return firstByte >= 0x20 && firstByte <= 0x3F
+}
+
+func isGlobalUnicastIPv6(ip net.IP) bool {
+	return IsGlobalUnicastIPv6(ip)
 }
 
 func (s *DDNSService) CheckAndUpdateIPv6(manualIPv6 string) {

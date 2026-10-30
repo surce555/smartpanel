@@ -33,6 +33,81 @@ func isPrivateOrLocalIP(ip net.IP) bool {
 	return false
 }
 
+func isSameSubnetIPv6(ip1, ip2 net.IP) bool {
+	if ip1 == nil || ip2 == nil {
+		return false
+	}
+	ip1_16 := ip1.To16()
+	ip2_16 := ip2.To16()
+	if ip1_16 == nil || ip2_16 == nil {
+		return false
+	}
+	if ip1.To4() != nil || ip2.To4() != nil {
+		return false
+	}
+	if !services.IsGlobalUnicastIPv6(ip1) || !services.IsGlobalUnicastIPv6(ip2) {
+		return false
+	}
+	// Compare first 64 bits (first 8 bytes)
+	for i := 0; i < 8; i++ {
+		if ip1_16[i] != ip2_16[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func isCGNAT(ip net.IP) bool {
+	v4 := ip.To4()
+	if v4 == nil {
+		return false
+	}
+	return v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127
+}
+
+func isSameOrNearbyIPv4(ip1, ip2 net.IP) bool {
+	if ip1 == nil || ip2 == nil {
+		return false
+	}
+	v4_1 := ip1.To4()
+	v4_2 := ip2.To4()
+	if v4_1 == nil || v4_2 == nil {
+		return false
+	}
+	if v4_1.Equal(v4_2) {
+		return true
+	}
+	if isCGNAT(v4_1) && isCGNAT(v4_2) {
+		return v4_1[0] == v4_2[0] && v4_1[1] == v4_2[1] && v4_1[2] == v4_2[2]
+	}
+	return false
+}
+
+func isIPInWhitelist(ip net.IP, whitelistStr string) bool {
+	if ip == nil || strings.TrimSpace(whitelistStr) == "" {
+		return false
+	}
+	entries := strings.Split(whitelistStr, ",")
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			_, ipNet, err := net.ParseCIDR(entry)
+			if err == nil && ipNet.Contains(ip) {
+				return true
+			}
+		} else {
+			target := net.ParseIP(entry)
+			if target != nil && target.Equal(ip) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func getHostLANIPs() []string {
 	var ips []string
 	ifaces, err := net.Interfaces()
@@ -115,7 +190,7 @@ func resolveClientIP(c *gin.Context) string {
 	return c.ClientIP()
 }
 
-func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
+func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string, string) {
 	rawClientIP := resolveClientIP(c)
 	clientIP := net.ParseIP(rawClientIP)
 
@@ -130,47 +205,73 @@ func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 	}
 
 	isLAN := false
-	// Only genuinely private/loopback/link-local visitor addresses count as LAN.
-	//
-	// `isSameSubnetIPv6` used to be OR'ed in here by comparing the first 64 bits
-	// against the host's own interfaces. That is wrong on residential IPv6: ISP
-	// deployments typically hand the whole street the same /64 (or share a /56),
-	// so unrelated neighbours matched and were treated as "in the LAN".
-	//
-	// The peer address (RemoteAddr) is deliberately NOT used when the request
-	// came through a tunnel: `cloudflared` runs on the NAS itself, so the peer is
-	// always 127.0.0.1 and would make every remote visitor look local. Only the
-	// resolved visitor address is meaningful there.
+	lanReason := ""
+
+	// 1. Direct private or local loopback visitor IP
 	if clientIP != nil && isPrivateOrLocalIP(clientIP) {
 		isLAN = true
+		lanReason = "客户端私网 IP 直连 (" + rawClientIP + ")"
 	} else if !proxied && remoteIP != nil && isPrivateOrLocalIP(remoteIP) {
 		isLAN = true
+		lanReason = "局域网对端直连 (" + remoteIP.String() + ")"
 	}
 
-	// If the visitor shares the exact same public IPv4 egress with the NAS,
-	// they are behind the same home NAT gateway/router on the same LAN.
-	serverIPv4 := services.GetCapturedServerIPv4()
-	if serverIPv4 != "" && clientIP != nil && clientIP.To4() != nil && clientIP.String() == serverIPv4 {
+	// 2. IP Whitelist check (user configured in settings)
+	whitelist := database.GetSetting("lan_ip_whitelist")
+	if !isLAN && clientIP != nil && isIPInWhitelist(clientIP, whitelist) {
 		isLAN = true
+		lanReason = "匹配内网 IP 白名单 (" + rawClientIP + ")"
 	}
 
-	// Check if request Host is a LAN IP or local domain
+	// 3. IPv6 Subnet matching (same /64 home broadband prefix)
+	if !isLAN && clientIP != nil && clientIP.To4() == nil && services.IsGlobalUnicastIPv6(clientIP) {
+		allV6 := services.GetAllServerIPv6s()
+		for _, v6Str := range allV6 {
+			nasV6 := net.ParseIP(v6Str)
+			if nasV6 != nil && isSameSubnetIPv6(clientIP, nasV6) {
+				isLAN = true
+				lanReason = "与 NAS 处于同一 IPv6 /64 子网 (" + rawClientIP + ")"
+				break
+			}
+		}
+	}
+
+	// 4. IPv4 Egress matching (same home NAT router egress)
+	if !isLAN && clientIP != nil && clientIP.To4() != nil {
+		serverIPv4 := services.GetCapturedServerIPv4()
+		if serverIPv4 == "" {
+			serverIPv4 = database.GetSetting("server_public_ipv4")
+		}
+		if serverIPv4 != "" {
+			sIP := net.ParseIP(serverIPv4)
+			if sIP != nil && isSameOrNearbyIPv4(clientIP, sIP) {
+				isLAN = true
+				lanReason = "与 NAS 共享相同的家庭公网出口 IPv4 (" + serverIPv4 + ")"
+			}
+		}
+	}
+
+	// 5. Check if request Host is a LAN IP or local domain
 	hostOnly := c.Request.Host
 	if h, _, err := net.SplitHostPort(hostOnly); err == nil {
 		hostOnly = h
 	}
-	if hostIP := net.ParseIP(hostOnly); hostIP != nil && isPrivateOrLocalIP(hostIP) {
-		isLAN = true
-	}
-	if strings.HasSuffix(hostOnly, ".local") || strings.HasSuffix(hostOnly, ".lan") || strings.HasSuffix(hostOnly, ".home.arpa") {
-		isLAN = true
-	}
-
-	lanDomain := database.GetSetting("lan_domain")
-	if lanDomain != "" {
-		cleanLan := strings.TrimPrefix(strings.TrimSpace(lanDomain), "*.")
-		if hostOnly == cleanLan || strings.HasSuffix(hostOnly, "."+cleanLan) {
+	if !isLAN {
+		if hostIP := net.ParseIP(hostOnly); hostIP != nil && isPrivateOrLocalIP(hostIP) {
 			isLAN = true
+			lanReason = "通过内网 IP 访问 (" + hostOnly + ")"
+		} else if strings.HasSuffix(hostOnly, ".local") || strings.HasSuffix(hostOnly, ".lan") || strings.HasSuffix(hostOnly, ".home.arpa") {
+			isLAN = true
+			lanReason = "通过本地域名访问 (" + hostOnly + ")"
+		} else {
+			lanDomain := database.GetSetting("lan_domain")
+			if lanDomain != "" {
+				cleanLan := strings.TrimPrefix(strings.TrimSpace(lanDomain), "*.")
+				if hostOnly == cleanLan || strings.HasSuffix(hostOnly, "."+cleanLan) {
+					isLAN = true
+					lanReason = "匹配自定义内网域名 (" + lanDomain + ")"
+				}
+			}
 		}
 	}
 
@@ -180,7 +281,7 @@ func evaluateLANEnvironment(c *gin.Context) (bool, string, []string, string) {
 		port = "5050"
 	}
 
-	return isLAN, rawClientIP, hostLANIPs, port
+	return isLAN, rawClientIP, hostLANIPs, port, lanReason
 }
 
 func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
@@ -192,7 +293,7 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 		interval = 5
 	}
 
-	isLAN, clientIPStr, hostIPs, srvPort := evaluateLANEnvironment(c)
+	isLAN, clientIPStr, hostIPs, srvPort, lanReason := evaluateLANEnvironment(c)
 
 	// Whether this page was loaded over a direct (non-proxied) connection, and
 	// whether that direct connection was IPv6.
@@ -228,6 +329,9 @@ func (h *NetworkHandler) GetNetworkInfo(c *gin.Context) {
 		Domain:           database.GetSetting("domain"),
 		V6Domain:         database.GetSetting("v6domain"),
 		LANDomain:        database.GetSetting("lan_domain"),
+		ServerPublicIPv4: database.GetSetting("server_public_ipv4"),
+		LANIPWhitelist:   database.GetSetting("lan_ip_whitelist"),
+		LANReason:        lanReason,
 		DDNSEnabled:      database.GetSetting("ddns_enabled") == "true",
 		DDNSInterval:     interval,
 		DDNSStatus:       database.GetSetting("ddns_status"),
@@ -277,7 +381,7 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 	if interval <= 0 {
 		interval = 5
 	}
-	isLAN, clientIPStr, hostIPs, srvPort := evaluateLANEnvironment(c)
+	isLAN, clientIPStr, hostIPs, srvPort, lanReason := evaluateLANEnvironment(c)
 
 	viaCloudflare := isProxiedByCloudflare(c)
 	remoteHostSSE, _, sseSplitErr := net.SplitHostPort(c.Request.RemoteAddr)
@@ -300,6 +404,9 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 		Domain:           database.GetSetting("domain"),
 		V6Domain:         database.GetSetting("v6domain"),
 		LANDomain:        database.GetSetting("lan_domain"),
+		ServerPublicIPv4: database.GetSetting("server_public_ipv4"),
+		LANIPWhitelist:   database.GetSetting("lan_ip_whitelist"),
+		LANReason:        lanReason,
 		DDNSEnabled:      database.GetSetting("ddns_enabled") == "true",
 		DDNSInterval:     interval,
 		DDNSStatus:       database.GetSetting("ddns_status"),
@@ -330,6 +437,9 @@ func (h *NetworkHandler) StreamNetworkUpdates(c *gin.Context) {
 			info.HostLANIPs = hostIPs
 			info.ServerPort = srvPort
 			info.LANDomain = database.GetSetting("lan_domain")
+			info.ServerPublicIPv4 = database.GetSetting("server_public_ipv4")
+			info.LANIPWhitelist = database.GetSetting("lan_ip_whitelist")
+			info.LANReason = lanReason
 			// Keep the per-connection facts on every push. The broadcast payload
 			// originates from the DDNS service and does not know them; without
 			// this the frontend would see them reset to false mid-session.

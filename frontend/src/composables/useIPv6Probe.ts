@@ -65,6 +65,42 @@ export function isIPv6Address(ip?: string): boolean {
   return /^[0-9a-fA-F:]+$/.test(v)
 }
 
+/**
+ * Checks if a visitor IP matches user-configured LAN IP whitelist
+ * Supports exact IP match, /64 IPv6 prefix match, and /24 IPv4 subnet match
+ */
+export function isIpInWhitelist(clientIp?: string, whitelist?: string): boolean {
+  if (!clientIp || !whitelist) return false
+  const cleanClient = clientIp.trim().toLowerCase().replace(/^\[|\]$/g, '')
+  if (!cleanClient) return false
+
+  const entries = whitelist
+    .split(/[,;\n\r]+/)
+    .map((s) => s.trim().toLowerCase().replace(/^\[|\]$/g, ''))
+    .filter(Boolean)
+
+  for (const entry of entries) {
+    if (entry === cleanClient) return true
+
+    // IPv6 prefix match (e.g. 2409:8a00:1234:5678 or with ::/64)
+    if (entry.includes(':') && cleanClient.includes(':')) {
+      const cleanEntry = entry.replace(/\/64$/, '').replace(/::.*$/, '')
+      if (cleanEntry && cleanClient.startsWith(cleanEntry)) {
+        return true
+      }
+    }
+
+    // IPv4 subnet match (e.g. 192.168.1.0/24 or 192.168.1.)
+    if (entry.includes('.') && cleanClient.includes('.')) {
+      const cleanEntry = entry.replace(/\/24$/, '').replace(/\.0$/, '')
+      if (cleanEntry && cleanClient.startsWith(cleanEntry)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 const IPV6_CACHE_KEY = 'smartpanel_ipv6_probe'
 const TTL_POSITIVE_MS = 10 * 60 * 1000 // 10 minutes for confirmed positive IPv6
 const TTL_NEGATIVE_MS = 30 * 1000      // 30 seconds for negative/unsupported

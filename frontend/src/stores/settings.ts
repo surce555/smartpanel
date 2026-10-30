@@ -27,6 +27,9 @@ export interface NetworkInfo {
   direct_ipv6?: boolean
   /** Client demonstrably has IPv6 connectivity (visitor address is IPv6) */
   client_has_ipv6?: boolean
+  server_public_ipv4?: string
+  lan_reason?: string
+  lan_ip_whitelist?: string
 }
 
 export const useSettingsStore = defineStore('settings', () => {
