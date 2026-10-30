@@ -122,63 +122,58 @@ export function useIPv6Probe() {
    * This is deliberately NOT a test of the NAS. Whether the NAS has IPv6 is
    * already known from the backend (`current_ipv6` / `detected_host_ipv6`); the
    * only open question at click time is whether the viewer's own network can
-   * reach IPv6 addresses. Conflating the two caused several wrong fixes.
+   * reach IPv6 addresses.
    *
-   * Implementation notes:
+   * The discriminator is `fetch` resolution, NOT elapsed time. A previous
+   * version used an <img> and treated any `onerror` slower than 60ms as
+   * "connected". That is unsound: a device with no IPv6 route can still sit
+   * retrying for hundreds of milliseconds before the request fails, which was
+   * longer than the threshold and made every IPv4-only device look IPv6-capable
+   * — the exact bug it was meant to fix.
    *
-   *  - Targets are LITERAL IPv6 addresses (`https://[2001:4860:4860::8888]/`).
-   *    A literal needs no AAAA record, so the test cannot fail because of DNS or
-   *    because a domestic probe domain is blocked - the two failure modes that
-   *    made the old `6.ipw.cn` probes unreliable here.
-   *  - Uses an <img> probe rather than fetch: an <img> is not subject to CORS,
-   *    and on an HTTPS page an https:// target avoids the mixed-content block.
-   *  - Distinguishes "answered" from "never connected" primarily by TIME. A
-   *    reachable IPv6 host answers quickly (even with an error status); a client
-   *    with no IPv6 cannot route the address and stays silent until the timeout.
+   * With `fetch(..., { mode: 'no-cors' })` there is a hard signal:
    *
-   * The original implementation relied on the same <img>+timeout idea and worked
-   * in practice; it only fell apart because the probe target was a domestic
-   * domain that became unreachable, so every check timed out and reported
-   * "no IPv6" regardless of the client.
+   *   resolve -> the request reached the server (opaque response counts), so a
+   *              TCP/TLS connection to that IPv6 address was established
+   *   reject  -> no connection was made
+   *
+   * Targets are LITERAL IPv6 addresses so no AAAA lookup is involved, and the
+   * https targets avoid the mixed-content block on an https page.
    */
-  function probeClientIPv6(timeoutMs: number): Promise<boolean> {
-    // IPv6-only endpoints reached by literal address (no DNS involved).
+  async function probeClientIPv6(timeoutMs: number): Promise<boolean> {
+    // Reached reliably from IPv4- and IPv6-capable hosts alike; a literal needs
+    // no DNS, so a blocked/blocked-by-ISP probe domain cannot skew the result.
     const targets = [
       'https://[2001:4860:4860::8888]/',
       'https://[2606:4700:4700::1111]/',
       'https://[2620:fe::fe]/',
     ]
 
-    const probeOne = (url: string, timeout: number): Promise<boolean> =>
-      new Promise<boolean>((resolve) => {
-        const img = new Image()
-        const startedAt = Date.now()
-        let settled = false
+    const probeOne = async (url: string): Promise<boolean> => {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        await fetch(url, {
+          mode: 'no-cors',
+          cache: 'no-store',
+          credentials: 'omit',
+          redirect: 'follow',
+          referrerPolicy: 'no-referrer',
+          signal: controller.signal,
+        })
+        // Reaching here means a response came back over IPv6.
+        return true
+      } catch {
+        // DNS/route/TLS failure, or abort on timeout.
+        return false
+      } finally {
+        clearTimeout(timer)
+      }
+    }
 
-        const finish = (ok: boolean) => {
-          if (settled) return
-          settled = true
-          img.onload = null
-          img.onerror = null
-          clearTimeout(timer)
-          resolve(ok)
-        }
-
-        const timer = window.setTimeout(() => finish(false), timeout)
-
-        img.onload = () => finish(true)
-        img.onerror = () => {
-          // An error alone is ambiguous: it fires both when the host answered
-          // with a non-image response AND when the connection could not be made.
-          // Time disambiguates - a real connection completes a TCP/TLS round
-          // trip, whereas an unroutable address fails almost instantly.
-          finish(Date.now() - startedAt > 60)
-        }
-
-        img.src = `${url}?_t=${Date.now()}`
-      })
-
-    return Promise.all(targets.map((u) => probeOne(u, timeoutMs))).then((r) => r.some(Boolean))
+    const results = await Promise.all(targets.map((u) => probeOne(u)))
+    // One confirmed IPv6 connection is enough; all failing means no IPv6.
+    return results.some(Boolean)
   }
 
   /**
@@ -196,7 +191,7 @@ export function useIPv6Probe() {
    */
   async function probeIPv6(
     _customProbeUrl?: string,
-    timeoutMs: number = 2000,
+    timeoutMs: number = 4000,
     opts: {
       clientIP?: string
       directIPv6?: boolean
@@ -215,6 +210,13 @@ export function useIPv6Probe() {
     // 2. Page opened through a bare IPv6 host.
     if (isIPv6Host(window.location.hostname)) {
       lastProbeDetail.value = '当前通过 IPv6 地址访问，客户端支持 IPv6'
+      return setIPv6Result(true)
+    }
+
+    // 2b. Direct (non-proxied) connection whose peer address is IPv6. Equivalent
+    //     proof to `direct_ipv6`, kept for deployments that do not populate it.
+    if (!isProxiedClient.value && isIPv6Address(opts.clientIP)) {
+      lastProbeDetail.value = '后端观测到本次请求来自 IPv6 地址，客户端支持 IPv6'
       return setIPv6Result(true)
     }
 
