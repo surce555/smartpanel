@@ -124,47 +124,55 @@ export function useIPv6Probe() {
    * only open question at click time is whether the viewer's own network can
    * reach IPv6 addresses.
    *
-   * The discriminator is `fetch` resolution, NOT elapsed time. A previous
-   * version used an <img> and treated any `onerror` slower than 60ms as
-   * "connected". That is unsound: a device with no IPv6 route can still sit
-   * retrying for hundreds of milliseconds before the request fails, which was
-   * longer than the threshold and made every IPv4-only device look IPv6-capable
-   * — the exact bug it was meant to fix.
+   * Two earlier approaches both failed on a proxy setup (Clash with IPv6 turned
+   * off), and the reason matters:
    *
-   * With `fetch(..., { mode: 'no-cors' })` there is a hard signal:
+   *  - `<img>` + elapsed-time threshold: an unreachable address can take hundreds
+   *    of ms to fail, exceeding the threshold, so everything looked IPv6-capable.
+   *  - `fetch(..., { mode: 'no-cors' })` + literal IPv6: a proxy answers with its
+   *    own error page. `no-cors` cannot read the status, so that error page
+   *    RESOLVES the fetch and again looks like a working IPv6 connection.
    *
-   *   resolve -> the request reached the server (opaque response counts), so a
-   *              TCP/TLS connection to that IPv6 address was established
-   *   reject  -> no connection was made
+   * This version uses CORS mode against an IPv6-ONLY host. That combination is
+   * what makes it sound:
    *
-   * Targets are LITERAL IPv6 addresses so no AAAA lookup is involved, and the
-   * https targets avoid the mixed-content block on an https page.
+   *   - `api6.ipify.org` has an AAAA record and no usable A record, so it can
+   *     only be reached over IPv6. Reaching it proves IPv6 works.
+   *   - CORS mode exposes the real HTTP status, so a proxy's 502 error page is
+   *     rejected instead of being mistaken for success.
+   *   - The proxy error page additionally carries no `Access-Control-Allow-Origin`,
+   *     so the request fails the CORS check. Either way it cannot pass.
    */
   async function probeClientIPv6(timeoutMs: number): Promise<boolean> {
-    // Reached reliably from IPv4- and IPv6-capable hosts alike; a literal needs
-    // no DNS, so a blocked/blocked-by-ISP probe domain cannot skew the result.
+    // IPv6-only endpoints that send permissive CORS headers.
     const targets = [
-      'https://[2001:4860:4860::8888]/',
-      'https://[2606:4700:4700::1111]/',
-      'https://[2620:fe::fe]/',
+      'https://api6.ipify.org?format=json',
+      'https://v6.ident.me',
+      'https://ipv6.icanhazip.com',
     ]
 
     const probeOne = async (url: string): Promise<boolean> => {
       const controller = new AbortController()
       const timer = window.setTimeout(() => controller.abort(), timeoutMs)
       try {
-        await fetch(url, {
-          mode: 'no-cors',
+        const res = await fetch(url, {
+          mode: 'cors',
           cache: 'no-store',
           credentials: 'omit',
           redirect: 'follow',
           referrerPolicy: 'no-referrer',
           signal: controller.signal,
         })
-        // Reaching here means a response came back over IPv6.
-        return true
+        // A proxy/gateway error page must not count as a working IPv6 path.
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+          return false
+        }
+        // Any real answer from an IPv6-only host proves IPv6 connectivity.
+        // 200 with JSON is the expected case; auth/console quirks that return
+        // 401/403 still required a working IPv6 connection, so accept them.
+        return res.ok || res.status === 401 || res.status === 403
       } catch {
-        // DNS/route/TLS failure, or abort on timeout.
+        // DNS/route/TLS failure, CORS rejection, or abort on timeout.
         return false
       } finally {
         clearTimeout(timer)
